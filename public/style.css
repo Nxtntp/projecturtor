@@ -1,0 +1,229 @@
+/* --------------------------
+   รีเซ็ตสไตล์พื้นฐาน
+--------------------------- */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* --------------------------
+   พื้นหลังหลักของหน้า
+--------------------------- */
+body {
+    /* ลองใช้ฟอนต์ Prompt จาก Google Fonts หรือเปลี่ยนตามชอบ */
+    font-family: "Prompt", sans-serif;
+    /* ไล่สีพื้นหลังแบบ Gradient */
+    background: linear-gradient(120deg, #fdfbfb 0%, #ebedee 100%);
+    color: #333;
+    min-height: 100vh;
+}
+
+/* --------------------------
+   ส่วน Header + Navigation
+--------------------------- */
+header {
+    background: #ff6f61; /* สีหลัก */
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    padding: 20px;
+    text-align: center;
+    position: relative;
+}
+
+/* ทำให้ H1 ดูเด่นขึ้น */
+header h1 {
+    margin: 0;
+    font-size: 2rem;
+    color: #fff;
+    font-weight: 600;
+}
+
+/* เมนู Navigation */
+nav {
+    margin-top: 10px;
+}
+
+nav ul {
+    list-style: none;
+    padding: 0;
+    display: inline-block; /* เพื่อจัดให้อยู่ตรงกลาง */
+}
+
+nav ul li {
+    display: inline-block;
+    margin: 0 10px;
+}
+
+/* สไตล์ลิงก์เมนู */
+nav ul li a {
+    color: #fff;
+    text-decoration: none;
+    font-size: 1rem;
+    transition: color 0.3s ease;
+}
+
+/* โฮเวอร์เมนู */
+nav ul li a:hover {
+    color: #ffe6e2;
+}
+
+/* --------------------------
+   ส่วนเนื้อหา (Main)
+--------------------------- */
+main {
+    padding: 40px 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* ตัวอย่าง Heading ด้านใน Main */
+main h2 {
+    font-size: 1.8rem;
+    margin-bottom: 10px;
+    color: #ff6f61;
+}
+
+/* ข้อความแนะนำ */
+main p {
+    font-size: 1rem;
+    line-height: 1.6;
+    margin-bottom: 20px;
+}
+
+/* --------------------------
+   สไตล์ Form (กล่อง, ปุ่ม)
+--------------------------- */
+form {
+    background-color: #fff;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    max-width: 500px;
+    margin: 0 auto 40px auto;
+}
+
+form label {
+    display: block;
+    margin: 0 0 6px;
+    font-weight: 500;
+    color: #444;
+}
+
+form input,
+form select,
+form textarea {
+    width: 100%;
+    padding: 12px;
+    margin-bottom: 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+    font-family: inherit;
+}
+
+form textarea {
+    min-height: 80px;
+    resize: vertical; /* อนุญาตให้ยืด/หด textarea แนวตั้ง */
+}
+
+/* โฮเวอร์/โฟกัส input */
+form input:focus,
+form select:focus,
+form textarea:focus {
+    outline: none;
+    border-color: #ff6f61;
+}
+
+form button {
+    background-color: #ff6f61;
+    color: #fff;
+    padding: 12px 20px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: background-color 0.3s ease;
+    font-family: inherit;
+}
+
+form button:hover {
+    background-color: #e65a50;
+}
+
+/* --------------------------
+   ตาราง Schedule
+--------------------------- */
+#scheduleTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px auto;
+    max-width: 800px;
+    background-color: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+#scheduleTable th {
+    background-color: #ff6f61;
+    color: #fff;
+    padding: 12px;
+    text-align: center;
+    font-weight: 600;
+}
+
+#scheduleTable td {
+    padding: 10px;
+    text-align: center;
+    border: 1px solid #ddd;
+}
+
+/* สถานะ Available/Unavailable */
+.available {
+    background-color: #90EE90; /* สีเขียวสำหรับสถานะเปิดรับสอน */
+    color: #000;
+}
+
+.unavailable {
+    background-color: #F08080; /* สีแดงสำหรับสถานะไม่ว่าง */
+    color: #fff;
+}
+
+/* --------------------------
+   ส่วน Footer
+--------------------------- */
+footer {
+    background-color: #ff6f61;
+    color: #fff;
+    text-align: center;
+    padding: 15px;
+    position: relative;
+    bottom: 0;
+    width: 100%;
+    font-size: 0.9rem;
+}
+
+footer p {
+    margin: 0;
+}
+
+/* --------------------------
+   ตัวอย่างปุ่มอื่น ๆ (ถ้ามี)
+--------------------------- */
+.button {
+    display: inline-block;
+    background-color: #ff6f61;
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+}
+
+.button:hover {
+    background-color: #e65a50;
+}
+
+/* 
+   สามารถเพิ่มคลาส/เอฟเฟกต์อื่น ๆ ตามต้องการ
+   เช่น Fade in, Slide, ฯลฯ
+*/ 

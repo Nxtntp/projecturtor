@@ -1,0 +1,105 @@
+<!-- booking.html (ตัวอย่าง) -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>จอง Slot</title>
+  <!-- ใส่ Bootstrap CSS หรืออื่น ๆ -->
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">Tutor Finder</a>
+    </div>
+  </nav>
+
+  <div class="container my-5">
+    <h2>จอง Slot</h2>
+    <div id="slotInfo" class="mb-3">กำลังโหลดข้อมูล Slot...</div>
+
+    <form id="bookingForm">
+      <div class="mb-3">
+        <label for="chosenSubject" class="form-label">วิชา</label>
+        <input type="text" class="form-control" id="chosenSubject" required>
+      </div>
+      <div class="mb-3">
+        <label for="bookingType" class="form-label">ประเภทการจอง</label>
+        <select class="form-select" id="bookingType">
+          <option value="single">เดี่ยว</option>
+          <option value="group">กลุ่ม</option>
+        </select>
+      </div>
+      <button type="submit" class="btn btn-primary w-100">ยืนยันการจอง</button>
+    </form>
+  </div>
+
+  <script>
+    let slotId = null;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // ดึง slotId จาก query string เช่น /booking?slotId=123
+      const params = new URLSearchParams(window.location.search);
+      slotId = params.get("slotId");
+      if (!slotId) {
+        alert("ไม่พบ slotId ใน URL");
+        return;
+      }
+
+      loadSlotInfo();
+      document.getElementById("bookingForm").addEventListener("submit", doBooking);
+    });
+
+    function loadSlotInfo() {
+      // เรียก /api/single-slot/:slotId
+      fetch("/api/single-slot/" + slotId)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.slot) {
+            document.getElementById("slotInfo").innerHTML =
+              `<div class="alert alert-danger">ไม่พบข้อมูล Slot</div>`;
+            return;
+          }
+          const s = data.slot;
+          document.getElementById("slotInfo").innerHTML = `
+            <p><strong>วันที่:</strong> ${s.date}</p>
+            <p><strong>เวลา:</strong> ${s.start_time} - ${s.end_time}</p>
+            <p><strong>สถานะ:</strong> ${s.status}</p>
+          `;
+        })
+        .catch(err => {
+          console.error(err);
+          alert("เกิดข้อผิดพลาดในการโหลดข้อมูล Slot");
+        });
+    }
+
+    function doBooking(e) {
+      e.preventDefault();
+      const chosenSubject = document.getElementById("chosenSubject").value;
+      const bookingType = document.getElementById("bookingType").value;
+
+      fetch("/book-slot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slotId: slotId,
+          chosenSubject: chosenSubject,
+          bookingType: bookingType
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.message);
+        // ถ้าจองสำเร็จ → redirect ไปหน้าอื่น เช่น /pending-bookings
+        if (data.message.includes("pending")) {
+          window.location.href = "/pending-bookings";
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alert("ไม่สามารถจอง slot ได้");
+      });
+    }
+  </script>
+</body>
+</html>

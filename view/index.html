@@ -1,0 +1,127 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Tutor Finder</title>
+
+  <!-- เรียก Bootstrap CSS จาก CDN -->
+  <link 
+    rel="stylesheet" 
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+  >
+  <!-- ถ้ามี style.css ของเดิม ก็ยังสามารถเรียกต่อท้ายได้ -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- นี่คือ Navbar ของ Bootstrap -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">Tutor Finder</a>
+      <button 
+        class="navbar-toggler" 
+        type="button" 
+        data-bs-toggle="collapse" 
+        data-bs-target="#navbarNav"
+      >
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div 
+        class="collapse navbar-collapse" 
+        id="navbarNav"
+      >
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item" id="signupLink">
+            <a class="nav-link" href="/register">สมัครสมาชิก</a>
+          </li>
+          <li class="nav-item" id="loginLink">
+            <a class="nav-link" href="/login">เข้าสู่ระบบ</a>
+          </li>
+          <li class="nav-item" id="searchLink">
+            <a class="nav-link" href="/search">ค้นหาติวเตอร์</a>
+          </li>
+          <li class="nav-item" id="profileLink" style="display:none;">
+            <a class="nav-link" href="/profile">โปรไฟล์</a>
+          </li>
+          <!-- ลิงก์ตารางสอน แยกเป็น <li> เดี่ยวๆ ไม่ซ้อนใน logout -->
+          <li class="nav-item" id="scheduleLink" style="display:none;">
+            <a class="nav-link" href="/schedule">ตารางสอน</a>
+          </li>
+          <li class="nav-item" id="logoutLink" style="display:none;">
+            <a class="nav-link" href="#" onclick="logout()">ออกจากระบบ</a>
+            <li class="nav-item" id="calendarLink" style="display:none;">
+              <a class="nav-link" href="/calendar">ปฏิทินตารางสอน</a>
+            </li>
+            
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ส่วนเนื้อหา (Hero Section) -->
+  <div class="container my-5">
+    <div class="row">
+      <div class="col-md-12 text-center">
+        <h1 class="mb-3">ยินดีต้อนรับสู่ระบบค้นหาติวเตอร์</h1>
+        <p class="lead">
+          เรียนรู้จากติวเตอร์มืออาชีพ เลือกติวเตอร์ที่เหมาะสมกับคุณได้ที่นี่!
+        </p>
+        <button class="btn btn-danger" onclick="window.location.href='/search'">
+          เริ่มต้นค้นหาติวเตอร์
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="bg-light text-center p-3">
+    <p class="mb-0">&copy; 2025 Tutor Finder</p>
+  </footer>
+
+  <!-- เรียก Bootstrap JS (ถ้าใช้ฟังก์ชัน Navbar, Modal ฯลฯ) -->
+  <script 
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+  ></script>
+
+  <script>
+    window.onload = function() {
+      fetch("/status")
+        .then(response => response.json())
+        .then(data => {
+          if (data.message === "ผู้ใช้ล็อกอินอยู่") {
+            // ซ่อนลิงก์สมัคร/ล็อกอิน
+            document.getElementById("signupLink").style.display = "none";
+            document.getElementById("loginLink").style.display = "none";
+
+            // โชว์ลิงก์ logout, profile, search, schedule
+            document.getElementById("logoutLink").style.display = "block";
+            document.getElementById("profileLink").style.display = "block";
+            document.getElementById("searchLink").style.display = "block";
+            document.getElementById("scheduleLink").style.display = "block";
+            document.getElementById("calendarLink").style.display = "block";
+
+          }
+        })
+        .catch(error => {
+          console.log('ไม่สามารถตรวจสอบสถานะการล็อกอินได้', error);
+        });
+    }
+
+    function logout() {
+      fetch("/logout", {
+        method: "POST"
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.message === "ออกจากระบบสำเร็จ") {
+          window.location.href = "/";
+        }
+      })
+      .catch(error => {
+        console.error("เกิดข้อผิดพลาดในการออกจากระบบ", error);
+      });
+    }
+  </script>
+</body>
+</html>

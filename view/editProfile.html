@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>แก้ไขโปรไฟล์ - Tutor Finder</title>
+  <!-- Bootstrap CSS -->
+  <link 
+    rel="stylesheet" 
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+  >
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">Tutor Finder</a>
+    </div>
+  </nav>
+
+  <div class="container my-5">
+    <div class="row justify-content-center">
+      <div class="col-md-8">
+        <h2 class="mb-4 text-center">แก้ไขโปรไฟล์</h2>
+        
+        <!-- (1) ฟอร์มแก้ไขหมวดหมู่/วิชา/ฟิลด์อื่นๆ -->
+        <form id="profileForm">
+          <!-- เลือกหลายหมวดหมู่ -->
+          <div class="mb-3">
+            <label class="form-label">หมวดหมู่ (เลือกได้หลายหมวด)</label>
+            <div id="categoryContainer">
+              <input type="checkbox" name="categoryCheckbox" value="math"> คณิตศาสตร์<br>
+              <input type="checkbox" name="categoryCheckbox" value="science"> วิทยาศาสตร์<br>
+              <input type="checkbox" name="categoryCheckbox" value="english"> ภาษาอังกฤษ<br>
+              <input type="checkbox" name="categoryCheckbox" value="agriculture"> เกษตร<br>
+              <input type="checkbox" name="categoryCheckbox" value="others"> อื่น ๆ<br>
+            </div>
+          </div>
+
+          <!-- แสดงวิชาที่สอน (รวมของหมวดที่ติ๊ก) + ช่องกรอกราคาต่อวิชา -->
+          <div class="mb-3">
+            <label class="form-label">วิชาที่สอน (เลือกได้หลายวิชา + ระบุราคา)</label>
+            <div id="subjectContainer"></div>
+          </div>
+
+          <!-- ช่องพิมพ์วิชาเอง (ถ้าต้องการ) -->
+          <div class="mb-3">
+            <label for="customSubject" class="form-label">วิชาอื่น ๆ (ถ้าไม่พบในรายการ)</label>
+            <input 
+              type="text" 
+              id="customSubject" 
+              name="customSubject" 
+              class="form-control"
+              placeholder="เช่น ชีววิทยาขั้นสูง, สถาปัตยพื้นฐาน"
+            >
+            <small class="text-muted">พิมพ์หลายวิชาคั่นด้วย , ได้</small>
+          </div>
+
+          <!-- คำอธิบาย -->
+          <div class="mb-3">
+            <label for="description" class="form-label">คำอธิบายตัวเอง</label>
+            <textarea id="description" class="form-control" rows="3"></textarea>
+          </div>
+
+          <!-- อัตราค่าบริการ (รวม) -->
+          <div class="mb-3">
+            <label for="hourlyRate" class="form-label">อัตราค่าบริการ (ต่อชั่วโมง) [รวม]</label>
+            <input type="number" id="hourlyRate" class="form-control">
+          </div>
+
+          <div class="mb-3">
+            <label for="groupRate" class="form-label">อัตราค่าบริการ (กลุ่ม) [รวม]</label>
+            <input type="number" id="groupRate" class="form-control">
+          </div>
+
+          <!-- ช่องทางติดต่อ -->
+          <div class="mb-3">
+            <label for="contactInfo" class="form-label">ช่องทางติดต่อ</label>
+            <input type="text" id="contactInfo" class="form-control">
+          </div>
+
+          <!-- สถานที่สอน -->
+          <div class="mb-3">
+            <label for="location" class="form-label">สถานที่สอน</label>
+            <input type="text" id="location" class="form-control">
+          </div>
+
+          <button type="submit" class="btn btn-danger w-100">บันทึกการเปลี่ยนแปลง</button>
+        </form>
+
+        <hr>
+
+        <!-- (2) ฟอร์มอัปโหลดรูปโปรไฟล์ (multipart/form-data) -->
+        <h3 class="mt-4">อัปโหลดรูปโปรไฟล์</h3>
+        <form id="uploadPicForm" enctype="multipart/form-data">
+          <div class="mb-3">
+            <label for="profilePic" class="form-label">เลือกรูปโปรไฟล์</label>
+            <input 
+              type="file" 
+              id="profilePic" 
+              name="profilePic" 
+              accept="image/*" 
+              class="form-control"
+            >
+          </div>
+          <button type="submit" class="btn btn-secondary">อัปโหลดรูป</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script 
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+  ></script>
+
+  <script>
+    // รายการวิชาในแต่ละหมวด (ตัวอย่าง)
+    const subjectOptionsByCategory = {
+      math: ["แคลคูลัส", "เรขาคณิต", "พีชคณิต", "สถิติ"],
+      science: ["ฟิสิกส์", "เคมี", "ชีววิทยา", "วิทย์ทั่วไป"],
+      english: ["Grammar", "Reading", "Writing", "TOEIC"],
+      agriculture: ["พืชสวน", "สัตวศาสตร์", "ประมง", "เกษตรทั่วไป"],
+      others: ["อื่น ๆ"]
+    };
+
+    // เมื่อหมวดหมู่ถูกติ๊ก/ยกเลิก → สร้าง/ลบ checkbox วิชาที่เกี่ยวข้อง + ช่องกรอกราคาต่อวิชา
+    document.getElementById("categoryContainer").addEventListener("change", function() {
+      const catCbs = document.querySelectorAll("input[name='categoryCheckbox']:checked");
+      let categories = [];
+      catCbs.forEach(cb => categories.push(cb.value));
+
+      let subjectsToShow = [];
+      categories.forEach(cat => {
+        const subjs = subjectOptionsByCategory[cat] || [];
+        subjs.forEach(s => {
+          if (!subjectsToShow.includes(s)) {
+            subjectsToShow.push(s);
+          }
+        });
+      });
+
+      const container = document.getElementById("subjectContainer");
+      container.innerHTML = "";
+
+      subjectsToShow.forEach(subj => {
+        // Checkbox สำหรับเลือกสอนวิชานี้
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.name = "subjectCheckbox";
+        checkbox.value = subj;
+
+        // Label ชื่อวิชา
+        const label = document.createElement("label");
+        label.textContent = subj;
+        label.style.marginLeft = "5px";
+        label.style.marginRight = "10px";
+
+        // ช่องกรอก Hourly Rate
+        const hourlyInput = document.createElement("input");
+        hourlyInput.type = "number";
+        hourlyInput.name = `hourly_${subj}`; 
+        hourlyInput.placeholder = "ราคาเดี่ยว/ชม.";
+        hourlyInput.style.width = "120px";
+        hourlyInput.style.marginRight = "10px";
+
+        // ช่องกรอก Group Rate
+        const groupInput = document.createElement("input");
+        groupInput.type = "number";
+        groupInput.name = `group_${subj}`;
+        groupInput.placeholder = "ราคากลุ่ม/ชม.";
+        groupInput.style.width = "120px";
+
+        const br = document.createElement("br");
+
+        container.appendChild(checkbox);
+        container.appendChild(label);
+        container.appendChild(hourlyInput);
+        container.appendChild(groupInput);
+        container.appendChild(br);
+      });
+    });
+
+    // โหลดข้อมูลโปรไฟล์ (หมวดหมู่ + วิชา + ฟิลด์อื่น)
+    function loadProfile() {
+      fetch("/get-profile")
+        .then(res => res.json())
+        .then(data => {
+          if (data.profile) {
+            // (1) ติ๊ก checkbox หมวดหมู่
+            if (data.profile.category) {
+              const catArr = data.profile.category.split(",");
+              const allCatCbs = document.getElementsByName("categoryCheckbox");
+              catArr.forEach(cat => {
+                for (let cb of allCatCbs) {
+                  if (cb.value === cat.trim()) {
+                    cb.checked = true;
+                  }
+                }
+              });
+              // trigger เพื่อสร้าง checkbox วิชา
+              document.getElementById("categoryContainer").dispatchEvent(new Event("change"));
+            }
+
+            // (2) ติ๊ก checkbox วิชา + ใส่ราคาต่อวิชา
+            // subjects = "แคลคูลัส, เคมี, ..."
+            if (data.profile.subjects) {
+              setTimeout(() => {
+                const subjArr = data.profile.subjects.split(",");
+                const allSubjCbs = document.getElementsByName("subjectCheckbox");
+                subjArr.forEach(subj => {
+                  for (let cb of allSubjCbs) {
+                    if (cb.value === subj.trim()) {
+                      cb.checked = true;
+                    }
+                  }
+                });
+              }, 200);
+            }
+
+            // (3) ฟิลด์อื่น ๆ (description, hourlyRate, ...)
+            document.getElementById("description").value = data.profile.description || "";
+            document.getElementById("hourlyRate").value = data.profile.hourly_rate || "";
+            document.getElementById("groupRate").value = data.profile.group_rate || "";
+            document.getElementById("contactInfo").value = data.profile.contact_info || "";
+            document.getElementById("location").value = data.profile.location || "";
+
+            // (4) ถ้ามี subject_rates (ราคาต่อวิชา) เป็น JSON -> เติมลงในช่อง hourly_subj, group_subj
+            if (data.profile.subject_rates) {
+              try {
+                const ratesObj = JSON.parse(data.profile.subject_rates);
+                // ratesObj = { "แคลคูลัส": { "hourly": 500, "group": 300 }, ... }
+                setTimeout(() => {
+                  for (let subj in ratesObj) {
+                    const hourlyEl = document.querySelector(`input[name='hourly_${subj}']`);
+                    const groupEl = document.querySelector(`input[name='group_${subj}']`);
+                    if (hourlyEl) hourlyEl.value = ratesObj[subj].hourly;
+                    if (groupEl) groupEl.value = ratesObj[subj].group;
+                  }
+                }, 300);
+              } catch(e) {
+                console.error("parse subject_rates error:", e);
+              }
+            }
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          alert("เกิดข้อผิดพลาดในการโหลดข้อมูลโปรไฟล์");
+        });
+    }
+
+    // (1) ฟอร์มบันทึกโปรไฟล์ -> /update-profile (ส่ง subjectRates)
+    document.getElementById("profileForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+
+      // เก็บหมวดหมู่
+      const catCbs = document.querySelectorAll("input[name='categoryCheckbox']:checked");
+      let catArr = [];
+      catCbs.forEach(cb => catArr.push(cb.value));
+      const category = catArr.join(",");
+
+      // เก็บวิชา (checkbox)
+      const subjCbs = document.querySelectorAll("input[name='subjectCheckbox']:checked");
+      let subjArr = [];
+      subjCbs.forEach(cb => subjArr.push(cb.value));
+
+      // เพิ่มวิชาที่พิมพ์เอง
+      const customSubjectInput = document.getElementById("customSubject").value.trim();
+      if (customSubjectInput) {
+        const customArr = customSubjectInput.split(",");
+        customArr.forEach(s => subjArr.push(s.trim()));
+      }
+      const subjects = subjArr.join(",");
+
+      const description = document.getElementById("description").value;
+      const hourlyRate = document.getElementById("hourlyRate").value;
+      const groupRate = document.getElementById("groupRate").value;
+      const contactInfo = document.getElementById("contactInfo").value;
+      const location = document.getElementById("location").value;
+
+      // สร้าง subjectRates JSON
+      // ex: { "แคลคูลัส": {hourly: 500, group: 300}, "เคมี": {...} }
+      let subjectRatesObj = {};
+      subjArr.forEach(subj => {
+        const hourlyEl = document.querySelector(`input[name='hourly_${subj}']`);
+        const groupEl = document.querySelector(`input[name='group_${subj}']`);
+        if (!hourlyEl || !groupEl) return; // กรณีไม่เจอ
+
+        const hVal = parseFloat(hourlyEl.value) || 0;
+        const gVal = parseFloat(groupEl.value) || 0;
+        subjectRatesObj[subj] = {
+          hourly: hVal,
+          group: gVal
+        };
+      });
+      const subjectRatesJSON = JSON.stringify(subjectRatesObj);
+
+      fetch("/update-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category,
+          description,
+          subjects,
+          hourlyRate,
+          groupRate,
+          contactInfo,
+          location,
+          subjectRates: subjectRatesJSON  // <-- ส่งราคาต่อวิชาเป็น JSON
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.message && data.message.includes("สำเร็จ")) {
+          alert("อัปเดตโปรไฟล์เรียบร้อย!");
+          window.location.href = "/profile";
+        } else {
+          alert(data.message || "เกิดข้อผิดพลาดในการอัปเดตโปรไฟล์");
+        }
+      })
+      .catch(err => {
+        console.error("Error in updating profile:", err);
+        alert("เกิดข้อผิดพลาดในการอัปเดตโปรไฟล์");
+      });
+    });
+
+    // (2) ฟอร์มอัปโหลดรูปโปรไฟล์ -> /upload-profile-pic
+    document.getElementById("uploadPicForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      const fileInput = document.getElementById("profilePic");
+      if (!fileInput.files[0]) {
+        alert("กรุณาเลือกรูปภาพก่อนอัปโหลด");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("profilePic", fileInput.files[0]);
+
+      fetch("/upload-profile-pic", {
+        method: "POST",
+        body: formData
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.message && data.message.includes("สำเร็จ")) {
+          alert("อัปโหลดรูปโปรไฟล์เรียบร้อย!");
+          // window.location.href = "/profile";
+        } else {
+          alert(data.message || "เกิดข้อผิดพลาด");
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alert("เกิดข้อผิดพลาดในการอัปโหลดรูป");
+      });
+    });
+
+    window.onload = loadProfile;
+  </script>
+</body>
+</html>

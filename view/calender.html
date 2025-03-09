@@ -1,0 +1,72 @@
+<!-- calendar.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>Calendar Booking</title>
+  <!-- FullCalendar CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.css">
+</head>
+<body>
+  <h1>ตารางสอนแบบ Calendar</h1>
+  <div id="calendar"></div>
+
+  <!-- FullCalendar JS -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/main.min.js"></script>
+  <script>
+  document.addEventListener('DOMContentLoaded', function() {
+    let calendarEl = document.getElementById('calendar');
+    let calendar = new FullCalendar.Calendar(calendarEl, {
+      initialView: 'timeGridWeek',
+      events: async function(fetchInfo, successCallback, failureCallback) {
+        try {
+          let response = await fetch('/get-schedule');
+          let data = await response.json();
+          if (data.schedule) {
+            // แปลง schedule -> events
+            let events = data.schedule.map(slot => {
+              return {
+                id: slot.id,
+                start: slot.date + 'T' + slot.start_time, // "YYYY-MM-DDTHH:MM:SS"
+                end: slot.date + 'T' + slot.end_time,
+                title: slot.status, // แสดงเป็น available/booked/unavailable
+                color: (slot.status === 'available') ? 'green' :
+                       (slot.status === 'booked') ? 'red' : 'grey'
+              };
+            });
+            successCallback(events);
+          } else {
+            successCallback([]); // ไม่มี slot
+          }
+        } catch (err) {
+          console.error(err);
+          failureCallback(err);
+        }
+      },
+      eventClick: function(info) {
+        let slotId = info.event.id;
+        let status = info.event.title;
+        if (status === 'available') {
+          if (confirm("จอง Slot นี้หรือไม่?")) {
+            fetch('/book-slot', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slotId })
+            })
+            .then(res => res.json())
+            .then(data => {
+              alert(data.message);
+              calendar.refetchEvents();
+            })
+            .catch(err => console.error(err));
+          }
+        } else {
+          alert("Slot นี้ไม่สามารถจองได้");
+        }
+      }
+    });
+    calendar.render();
+  });
+  </script>
+</body>
+</html>

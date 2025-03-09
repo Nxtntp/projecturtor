@@ -1,0 +1,328 @@
+<!-- /view/tutorProfile.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>โปรไฟล์ติวเตอร์</title>
+  <!-- Bootstrap CSS -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+  >
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">Tutor Finder</a>
+    </div>
+  </nav>
+
+  <div class="container my-4">
+    <h1>โปรไฟล์ติวเตอร์</h1>
+    <!-- ส่วนแสดงข้อมูลติวเตอร์ -->
+    <div id="tutorInfo" class="mb-4">
+      <!-- ใช้ JS เติมข้อมูล -->
+    </div>
+
+    <!-- ปุ่มสลับมุมมองตาราง -->
+    <div class="text-end mb-3">
+      <button id="btnGrid" class="btn btn-info">ตารางแบบปฏิทิน (Grid)</button>
+      <button id="btnList" class="btn btn-secondary">ตารางแบบรายการ (List)</button>
+    </div>
+
+    <!-- Grid View -->
+    <div id="gridContainer" style="display:none;"></div>
+
+    <!-- List View -->
+    <div id="listContainer" style="display:none;"></div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+  ></script>
+
+  <script>
+    let tutorId = null;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // 1) แยก tutorId จาก URL (/tutor-profile/:tutorId)
+      const pathParts = window.location.pathname.split('/');
+      tutorId = pathParts[2] || null;
+
+      if (!tutorId) {
+        alert("ไม่พบ tutorId ใน URL");
+        return;
+      }
+
+      // 2) โหลดข้อมูลโปรไฟล์ติวเตอร์
+      loadTutorInfo();
+
+      // 3) โหลดตารางแบบ default เป็น Grid
+      loadScheduleGrid();
+
+      // ผูก event ปุ่มสลับมุมมอง
+      document.getElementById("btnGrid").addEventListener("click", loadScheduleGrid);
+      document.getElementById("btnList").addEventListener("click", loadScheduleList);
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // A) ฟังก์ชันช่วยสำหรับกรอง slot เก่า
+    // ─────────────────────────────────────────────────────────────
+    function getLocalTodayStr() {
+      const d = new Date();
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;  // ex. "2025-09-01"
+    }
+
+    function filterOldDates(schedule) {
+      const todayStr = getLocalTodayStr();
+      // เก็บเฉพาะ slot ที่ date >= วันนี้
+      return schedule.filter(s => s.date >= todayStr);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // B) โหลดข้อมูลโปรไฟล์ติวเตอร์ + แสดง subject_rates (ถ้ามี)
+    // ─────────────────────────────────────────────────────────────
+    function loadTutorInfo() {
+      fetch(`/api/tutor/${tutorId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.profile) {
+            const infoDiv = document.getElementById("tutorInfo");
+            let html = `<h3>${data.profile.name || 'ไม่ทราบชื่อ'}</h3>`;
+            if (data.profile.profile_pic) {
+              html += `<img src="${data.profile.profile_pic}" alt="profile" style="max-width:200px;">`;
+            }
+            html += `<p>หมวดหมู่: ${data.profile.category || '-'}</p>`;
+            html += `<p>วิชา: ${data.profile.subjects || '-'}</p>`;
+            html += `<p>อัตราค่าสอน (รายชั่วโมง): ${data.profile.hourly_rate || '-'}</p>`;
+            html += `<p>อัตราค่าสอน (กลุ่ม): ${data.profile.group_rate || '-'}</p>`;
+            html += `<p>ติดต่อ: ${data.profile.contact_info || '-'}</p>`;
+            html += `<p>สถานที่สอน: ${data.profile.location || '-'}</p>`;
+
+            // ถ้ามี subject_rates เป็น JSON => แสดงรายการราคาต่อวิชา
+            if (data.profile.subject_rates) {
+              try {
+                const ratesObj = JSON.parse(data.profile.subject_rates);
+                if (Object.keys(ratesObj).length > 0) {
+                  html += `<h5>ราคาต่อวิชา:</h5><ul>`;
+                  for (let subj in ratesObj) {
+                    html += `<li>
+                      <strong>${subj}</strong>:
+                      เดี่ยว = ${ratesObj[subj].hourly || 0} บาท/ชม.,
+                      กลุ่ม = ${ratesObj[subj].group || 0} บาท/ชม.
+                    </li>`;
+                  }
+                  html += `</ul>`;
+                }
+              } catch(e) {
+                console.error("parse subject_rates error:", e);
+              }
+            }
+
+            infoDiv.innerHTML = html;
+          } else {
+            document.getElementById("tutorInfo").innerHTML =
+              `<div class="alert alert-danger">ไม่พบข้อมูลติวเตอร์</div>`;
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          document.getElementById("tutorInfo").innerHTML =
+            `<div class="alert alert-danger">เกิดข้อผิดพลาดในการโหลดโปรไฟล์</div>`;
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // C) โหลดตารางแบบ Grid
+    // ─────────────────────────────────────────────────────────────
+    function loadScheduleGrid() {
+      fetch(`/api/tutor-schedule/${tutorId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.schedule) {
+            document.getElementById("gridContainer").innerHTML =
+              `<div class="alert alert-warning">ไม่พบตาราง</div>`;
+            return;
+          }
+          // กรอง slot เก่าทิ้ง
+          const futureOrCurrent = filterOldDates(data.schedule);
+          if (futureOrCurrent.length === 0) {
+            document.getElementById("gridContainer").style.display = "block";
+            document.getElementById("listContainer").style.display = "none";
+            document.getElementById("gridContainer").innerHTML =
+              `<div class="alert alert-warning">ไม่พบตาราง (สัปดาห์เก่าหมดแล้ว)</div>`;
+            return;
+          }
+
+          // โชว์ gridContainer, ซ่อน listContainer
+          document.getElementById("gridContainer").style.display = "block";
+          document.getElementById("listContainer").style.display = "none";
+
+          const htmlGrid = renderSingleGrid(futureOrCurrent);
+          document.getElementById("gridContainer").innerHTML = htmlGrid;
+        })
+        .catch(err => {
+          console.error(err);
+          alert("เกิดข้อผิดพลาดในการโหลดตาราง (Grid)");
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // D) โหลดตารางแบบ List
+    // ─────────────────────────────────────────────────────────────
+    function loadScheduleList() {
+      fetch(`/api/tutor-schedule/${tutorId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.schedule) {
+            document.getElementById("listContainer").innerHTML =
+              `<div class="alert alert-warning">ไม่พบตาราง</div>`;
+            return;
+          }
+          // กรอง slot เก่าทิ้ง
+          const futureOrCurrent = filterOldDates(data.schedule);
+          if (futureOrCurrent.length === 0) {
+            document.getElementById("listContainer").style.display = "block";
+            document.getElementById("gridContainer").style.display = "none";
+            document.getElementById("listContainer").innerHTML =
+              `<div class="alert alert-warning">ไม่พบตาราง (สัปดาห์เก่าหมดแล้ว)</div>`;
+            return;
+          }
+
+          // โชว์ listContainer, ซ่อน gridContainer
+          document.getElementById("listContainer").style.display = "block";
+          document.getElementById("gridContainer").style.display = "none";
+
+          const htmlList = renderListTable(futureOrCurrent);
+          document.getElementById("listContainer").innerHTML = htmlList;
+        })
+        .catch(err => {
+          console.error(err);
+          alert("เกิดข้อผิดพลาดในการโหลดตาราง (List)");
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // E) Render Single Grid (ตารางเดียวรวมทุกวัน)
+    // ─────────────────────────────────────────────────────────────
+    function renderSingleGrid(schedule) {
+      // เรียง slot ตาม date, start_time
+      schedule.sort((a,b) => {
+        if (a.date === b.date) {
+          return a.start_time.localeCompare(b.start_time);
+        }
+        return a.date.localeCompare(b.date);
+      });
+
+      // unique date
+      let dateSet = new Set();
+      schedule.forEach(s => dateSet.add(s.date));
+      let dateArr = Array.from(dateSet).sort();
+
+      // เตรียมชั่วโมง 8..23
+      let hours = [];
+      for (let h=8; h<24; h++){
+        hours.push(h);
+      }
+
+      let html = `
+        <table class="table table-bordered text-center">
+          <thead class="table-dark">
+            <tr>
+              <th>เวลา</th>
+      `;
+      dateArr.forEach(d => {
+        html += `<th>${d}</th>`;
+      });
+      html += `</tr></thead><tbody>`;
+
+      hours.forEach(h => {
+        let hourLabel = `${String(h).padStart(2,'0')}:00`;
+        let startString = hourLabel + ":00";  // ex. "08:00:00"
+        let nextHour = `${String(h+1).padStart(2,'0')}:00`;
+        let timeRange = `${hourLabel}-${nextHour}`;
+
+        html += `<tr><td><strong>${timeRange}</strong></td>`;
+        dateArr.forEach(d => {
+          let slot = schedule.find(s => s.date === d && s.start_time === startString);
+          if (!slot) {
+            // ไม่มี slot
+            html += `<td style="background:#333; color:#fff;">-</td>`;
+          } else {
+            // เช็คสถานะ
+            if (slot.status === 'available') {
+              // ใส่ onclick เพื่อจอง
+              // ถ้าต้องการให้เปิดหน้า booking แทนการ prompt => redirect ไป booking?slotId=xxx
+              html += `<td style="background:green; color:white; cursor:pointer;"
+                           onclick="goBookingPage(${slot.id})">
+                         Available
+                       </td>`;
+            } else if (slot.status === 'unavailable') {
+              html += `<td style="background:gray; color:white;">Unavailable</td>`;
+            } else if (slot.status === 'booked') {
+              html += `<td style="background:orange; color:black;">Booked</td>`;
+            } else if (slot.status === 'pending') {
+              html += `<td style="background:#ffc107; color:#000;">Pending</td>`;
+            } else {
+              html += `<td>-</td>`;
+            }
+          }
+        });
+        html += `</tr>`;
+      });
+
+      html += `</tbody></table>`;
+      return html;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // F) Render List Table
+    // ─────────────────────────────────────────────────────────────
+    function renderListTable(schedule) {
+      // เรียงตาม date, start_time
+      schedule.sort((a,b) => {
+        if (a.date === b.date) {
+          return a.start_time.localeCompare(b.start_time);
+        }
+        return a.date.localeCompare(b.date);
+      });
+
+      let html = `
+        <table class="table table-bordered table-striped">
+          <thead>
+            <tr>
+              <th>วันที่</th>
+              <th>เวลา</th>
+              <th>สถานะ</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      schedule.forEach(s => {
+        html += `
+          <tr>
+            <td>${s.date}</td>
+            <td>${s.start_time} - ${s.end_time}</td>
+            <td>${s.status}</td>
+          </tr>
+        `;
+      });
+      html += `</tbody></table>`;
+      return html;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // G) ฟังก์ชัน “จอง Slot” → ถ้าอยากให้เปิดหน้า booking
+    // ─────────────────────────────────────────────────────────────
+    function goBookingPage(slotId) {
+      // Redirect ไปหน้า booking.html พร้อม slotId
+      window.location.href = "/booking?slotId=" + slotId;
+    }
+  </script>
+</body>
+</html>

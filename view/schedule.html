@@ -1,0 +1,477 @@
+<!-- /view/schedule.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>จัดการตารางสอน (รายสัปดาห์)</title>
+  <!-- Bootstrap CSS -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+  >
+  <style>
+    /* ตัวอย่างสไตล์เล็กน้อยสำหรับ Single Grid */
+    .big-grid-container {
+      overflow-x: auto;  /* ถ้าคอลัมน์เยอะ จะเลื่อนซ้ายขวาได้ */
+      background: #222;  /* สีเข้ม */
+      color: #fff;
+      padding: 10px;
+      border-radius: 6px;
+    }
+    .big-grid-container table thead {
+      background: #ddd;
+      color: #000;
+    }
+    .big-grid-container table td {
+      background: #333;
+    }
+    .big-grid-container table td.available {
+      background: #28a745; /* เขียว */
+      cursor: pointer;
+    }
+    .big-grid-container table td.unavailable {
+      background: #6c757d; /* เทา */
+      cursor: pointer;
+    }
+    .big-grid-container table td.booked {
+      background: #ffc107; /* เหลือง */
+      color: #000;
+    }
+    /* เพิ่มสถานะ pending */
+    .big-grid-container table td.pending {
+      background: #fd7e14; /* ส้ม */
+      color: #fff;
+    }
+
+    .big-grid-container table td {
+      min-width: 80px;
+      padding: 6px;
+    }
+    .big-grid-container table th {
+      min-width: 100px;
+      padding: 6px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">Tutor Finder</a>
+    </div>
+  </nav>
+
+  <div class="container my-4">
+    <h2 class="text-center mb-4">จัดการตารางสอน (รายสัปดาห์)</h2>
+
+    <!-- ปุ่มต่าง ๆ -->
+    <div class="text-end mb-3">
+      <button id="btnGenerate" class="btn btn-success">Generate 3 สัปดาห์</button>
+      <button id="btnAccordion" class="btn btn-primary">ดูตาราง (Accordion)</button>
+      <button id="btnSingleGrid" class="btn btn-info">ดูตาราง (Single Grid)</button>
+      <!-- ปุ่มไปหน้าดูคำขอจอง (Pending) -->
+      <a href="/pending-bookings" class="btn btn-warning">ดูคำขอจอง (Pending)</a>
+    </div>
+
+    <!-- Accordion View -->
+    <div class="accordion" id="weekAccordion" style="display:none;"></div>
+
+    <!-- Single Big Grid View -->
+    <div id="singleGridContainer" class="big-grid-container" style="display:none; margin-top:20px;">
+      <h4>ตารางรวม (Single Grid)</h4>
+      <div id="singleGrid"></div>
+    </div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+  ></script>
+
+  <script>
+    let lastOpenWeek = null; // จำสัปดาห์ที่เปิดใน Accordion
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // ผูก event กับปุ่ม
+      document.getElementById("btnGenerate").addEventListener("click", generateSchedule);
+      document.getElementById("btnAccordion").addEventListener("click", showAccordion);
+      document.getElementById("btnSingleGrid").addEventListener("click", showSingleGrid);
+
+      // เริ่มต้นด้วยการดูตารางแบบ Accordion
+      showAccordion();
+
+      // จดจำสัปดาห์ที่เปิด (Accordion)
+      document.addEventListener("click", (e) => {
+        if (e.target.classList.contains("accordion-button")) {
+          lastOpenWeek = e.target.getAttribute("data-weekstart");
+        }
+      });
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // 1) Generate
+    // ─────────────────────────────────────────────────────────────
+    function generateSchedule() {
+      fetch("/generate-schedule", { method: "POST" })
+        .then(res => res.json())
+        .then(data => {
+          alert(data.message);
+          // reload
+          showAccordion();
+        })
+        .catch(err => {
+          console.error(err);
+          alert("Error: generate-schedule");
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 2) แสดงแบบ Accordion
+    // ─────────────────────────────────────────────────────────────
+    function showAccordion() {
+      // เปิด Accordion, ปิด SingleGrid
+      document.getElementById("weekAccordion").style.display = "block";
+      document.getElementById("singleGridContainer").style.display = "none";
+
+      loadScheduleForAccordion();
+    }
+
+    function loadScheduleForAccordion() {
+      fetch("/get-schedule")
+        .then(res => res.json())
+        .then(data => {
+          if (!data.schedule) {
+            document.getElementById("weekAccordion").innerHTML =
+              '<div class="alert alert-warning">ไม่พบตาราง</div>';
+            return;
+          }
+
+          const futureOrCurrent = filterOldDates(data.schedule);
+          if (futureOrCurrent.length === 0) {
+            document.getElementById("weekAccordion").innerHTML =
+              '<div class="alert alert-warning">ไม่พบตาราง (สัปดาห์เก่าหมดแล้ว)</div>';
+            return;
+          }
+
+          const grouped = groupByWeek(futureOrCurrent);
+          displayWeeklyAccordion(grouped);
+        })
+        .catch(err => {
+          console.error(err);
+          alert("Error: loadScheduleForAccordion");
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 3) แสดงแบบ Single Grid
+    // ─────────────────────────────────────────────────────────────
+    function showSingleGrid() {
+      // เปิด SingleGrid, ปิด Accordion
+      document.getElementById("weekAccordion").style.display = "none";
+      document.getElementById("singleGridContainer").style.display = "block";
+
+      loadScheduleForSingleGrid();
+    }
+
+    function loadScheduleForSingleGrid() {
+      fetch("/get-schedule")
+        .then(res => res.json())
+        .then(data => {
+          if (!data.schedule) {
+            document.getElementById("singleGrid").innerHTML =
+              '<div class="alert alert-warning">ไม่พบตาราง</div>';
+            return;
+          }
+
+          const futureOrCurrent = filterOldDates(data.schedule);
+          if (futureOrCurrent.length === 0) {
+            document.getElementById("singleGrid").innerHTML =
+              '<div class="alert alert-warning">ไม่พบตาราง (สัปดาห์เก่าหมดแล้ว)</div>';
+            return;
+          }
+
+          // สร้าง single big grid (รวบทุกวัน)
+          const htmlGrid = renderSingleBigGrid(futureOrCurrent);
+          document.getElementById("singleGrid").innerHTML = htmlGrid;
+        })
+        .catch(err => {
+          console.error(err);
+          alert("Error: loadScheduleForSingleGrid");
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // filter slot ที่ date < วันนี้
+    // ─────────────────────────────────────────────────────────────
+    function filterOldDates(schedule) {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      return schedule.filter(s => s.date >= todayStr);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // groupByWeek + displayWeeklyAccordion (Accordion)
+    // ─────────────────────────────────────────────────────────────
+    function groupByWeek(schedule) {
+      schedule.sort((a,b) => {
+        if (a.date === b.date) {
+          return a.start_time.localeCompare(b.start_time);
+        }
+        return a.date.localeCompare(b.date);
+      });
+
+      let weeks = {};
+      schedule.forEach(slot => {
+        let dateObj = new Date(slot.date);
+        let monday = getMonday(dateObj);
+        let mondayStr = monday.toISOString().slice(0, 10);
+        if (!weeks[mondayStr]) {
+          weeks[mondayStr] = [];
+        }
+        weeks[mondayStr].push(slot);
+      });
+      return weeks;
+    }
+
+    function getMonday(dateObj) {
+      let d = new Date(dateObj);
+      let day = d.getDay();
+      let diff = (day === 0) ? 6 : (day - 1);
+      d.setDate(d.getDate() - diff);
+      return d;
+    }
+
+    function displayWeeklyAccordion(weeks) {
+      const accordion = document.getElementById("weekAccordion");
+      accordion.innerHTML = "";
+
+      const sortedMondays = Object.keys(weeks).sort((a,b) => a.localeCompare(b));
+      sortedMondays.forEach((mondayStr, index) => {
+        const slots = weeks[mondayStr];
+        const headingId = `headingWeek${index}`;
+        const collapseId = `collapseWeek${index}`;
+        const headerText = `สัปดาห์เริ่ม ${mondayStr}`;
+
+        let isShow = false;
+        if (mondayStr === lastOpenWeek) {
+          isShow = true;
+        } else if (index === 0 && !lastOpenWeek) {
+          isShow = true;
+        }
+
+        let itemHtml = `
+          <div class="accordion-item">
+            <h2 class="accordion-header" id="${headingId}">
+              <button
+                class="accordion-button ${isShow ? '' : 'collapsed'}"
+                type="button"
+                data-bs-toggle="collapse"
+                data-weekstart="${mondayStr}"
+                data-bs-target="#${collapseId}"
+                aria-expanded="${isShow ? 'true' : 'false'}"
+                aria-controls="${collapseId}"
+              >
+                ${headerText}
+              </button>
+            </h2>
+            <div
+              id="${collapseId}"
+              class="accordion-collapse collapse ${isShow ? 'show' : ''}"
+              aria-labelledby="${headingId}"
+              data-bs-parent="#weekAccordion"
+            >
+              <div class="accordion-body">
+                ${renderWeekTable(slots)}
+              </div>
+            </div>
+          </div>
+        `;
+        accordion.innerHTML += itemHtml;
+      });
+      // แสดง Accordion
+      accordion.style.display = "block";
+    }
+
+    function renderWeekTable(slots) {
+      let html = `
+        <table class="table table-bordered table-striped">
+          <thead class="table-light">
+            <tr>
+              <th>วันที่</th>
+              <th>เวลา</th>
+              <th>สถานะ</th>
+              <th>จัดการ</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      slots.forEach(slot => {
+        const dateObj = new Date(slot.date);
+        const dayName = getThaiDayName(dateObj.getDay());
+        const dateText = `${dayName} ${slot.date}`;
+        const timeRange = `${slot.start_time} - ${slot.end_time}`;
+
+        // ตรวจสอบสถานะเพื่อนำไปกำหนดปุ่ม
+        let action = '';
+        if (slot.status === 'booked') {
+          action = `<span class="text-danger">จองแล้ว</span>`;
+        } else if (slot.status === 'available') {
+          action = `
+            <button
+              class="btn btn-sm btn-outline-danger"
+              onclick="toggleSlot(${slot.id}, 'unavailable')"
+            >
+              ปิด (unavailable)
+            </button>
+          `;
+        } else if (slot.status === 'pending') {
+          action = `<span class="text-warning">รอการยืนยัน (pending)</span>`;
+        } else {
+          // unavailable
+          action = `
+            <button
+              class="btn btn-sm btn-outline-success"
+              onclick="toggleSlot(${slot.id}, 'available')"
+            >
+              เปิด (available)
+            </button>
+          `;
+        }
+
+        html += `
+          <tr>
+            <td>${dateText}</td>
+            <td>${timeRange}</td>
+            <td>${renderStatusBadge(slot.status)}</td>
+            <td>${action}</td>
+          </tr>
+        `;
+      });
+      html += `
+          </tbody>
+        </table>
+      `;
+      return html;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Single Big Grid (รวบทุกวันในช่วง)
+    // ─────────────────────────────────────────────────────────────
+    function renderSingleBigGrid(schedule) {
+      // 1) หา unique date ทั้งหมด
+      let dateSet = new Set();
+      schedule.forEach(s => dateSet.add(s.date));
+      // แปลงเป็น array + sort
+      let dateArr = Array.from(dateSet).sort();  // อาจยาวถึง 21 วัน
+
+      // 2) สร้าง range ชั่วโมง 8..24
+      let hours = [];
+      for (let h = 8; h < 24; h++) {
+        hours.push(h);
+      }
+
+      let html = `
+        <table class="table table-bordered text-center">
+          <thead>
+            <tr>
+              <th>เวลา</th>
+      `;
+      dateArr.forEach(d => {
+        const dateObj = new Date(d);
+        const dayName = getThaiDayName(dateObj.getDay());
+        html += `<th>${dayName}<br>${d}</th>`;
+      });
+      html += `</tr></thead><tbody>`;
+
+      hours.forEach(h => {
+        let hourLabel = String(h).padStart(2, '0') + ":00:00";
+        let nextHour = String(h+1).padStart(2, '0') + ":00";
+        let timeRangeLabel = `${String(h).padStart(2, '0')}:00 - ${nextHour}`;
+
+        html += `<tr>`;
+        // คอลัมน์แรก: เวลา
+        html += `<td><strong>${timeRangeLabel}</strong></td>`;
+
+        // columns = dateArr
+        dateArr.forEach(d => {
+          let slot = schedule.find(s => s.date === d && s.start_time === hourLabel);
+
+          if (!slot) {
+            html += `<td>-</td>`;
+          } else {
+            if (slot.status === 'booked') {
+              html += `<td class="booked">จองแล้ว</td>`;
+            } else if (slot.status === 'available') {
+              html += `<td class="available"
+                         onclick="toggleSlot(${slot.id}, 'unavailable')">
+                         Available
+                       </td>`;
+            } else if (slot.status === 'pending') {
+              // กรณี pending
+              html += `<td class="pending">Pending</td>`;
+            } else {
+              // unavailable
+              html += `<td class="unavailable"
+                         onclick="toggleSlot(${slot.id}, 'available')">
+                         Unavailable
+                       </td>`;
+            }
+          }
+        });
+
+        html += `</tr>`;
+      });
+
+      html += `</tbody></table>`;
+      return html;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Helper
+    // ─────────────────────────────────────────────────────────────
+    function renderStatusBadge(status) {
+      if (status === 'available') {
+        return `<span class="badge bg-success">Available</span>`;
+      } else if (status === 'unavailable') {
+        return `<span class="badge bg-secondary">Unavailable</span>`;
+      } else if (status === 'booked') {
+        return `<span class="badge bg-warning text-dark">Booked</span>`;
+      } else if (status === 'pending') {
+        return `<span class="badge bg-warning text-dark">Pending</span>`;
+      }
+      return status;
+    }
+
+    function getThaiDayName(dayIndex) {
+      const days = ["อาทิตย์","จันทร์","อังคาร","พุธ","พฤหัส","ศุกร์","เสาร์"];
+      return days[dayIndex] || "";
+    }
+
+    // toggleSlot
+    function toggleSlot(slotId, newStatus) {
+      fetch("/toggle-slot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slotId, newStatus })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.message === "อัปเดตสถานะสำเร็จ") {
+          // ดูว่าอยู่ใน Accordion หรือ Single Grid
+          const isSingleGrid = (document.getElementById("singleGridContainer").style.display === "block");
+          if (isSingleGrid) {
+            loadScheduleForSingleGrid();
+          } else {
+            loadScheduleForAccordion();
+          }
+        } else {
+          alert(data.message);
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alert("Error: toggleSlot");
+      });
+    }
+  </script>
+</body>
+</html>
