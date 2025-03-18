@@ -1,10 +1,14 @@
-<!-- booking.html (ตัวอย่าง) -->
+<!-- /view/booking.html -->
 <!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <title>จอง Slot</title>
-  <!-- ใส่ Bootstrap CSS หรืออื่น ๆ -->
+  <title>ยืนยันการจอง (หลายชั่วโมง)</title>
+  <!-- Bootstrap CSS -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+  >
 </head>
 <body>
   <!-- Navbar -->
@@ -14,91 +18,199 @@
     </div>
   </nav>
 
-  <div class="container my-5">
-    <h2>จอง Slot</h2>
-    <div id="slotInfo" class="mb-3">กำลังโหลดข้อมูล Slot...</div>
+  <div class="container my-4">
+    <h1>ยืนยันการจอง (หลายชั่วโมง)</h1>
 
+    <!-- แสดงข้อมูล Slots -->
+    <div id="slotsInfo" class="mb-3">
+      <!-- ใช้ JS เติมข้อมูล slot -->
+    </div>
+
+    <!-- ฟอร์มจอง -->
     <form id="bookingForm">
       <div class="mb-3">
-        <label for="chosenSubject" class="form-label">วิชา</label>
-        <input type="text" class="form-control" id="chosenSubject" required>
+        <label class="form-label">วิชา</label>
+        <select id="chosenSubject" class="form-select" required>
+          <option value="">-- กรุณาเลือกวิชา --</option>
+        </select>
       </div>
+
       <div class="mb-3">
-        <label for="bookingType" class="form-label">ประเภทการจอง</label>
-        <select class="form-select" id="bookingType">
+        <label class="form-label">ประเภทการจอง</label>
+        <select id="bookingType" class="form-select">
           <option value="single">เดี่ยว</option>
           <option value="group">กลุ่ม</option>
         </select>
       </div>
+
       <button type="submit" class="btn btn-primary w-100">ยืนยันการจอง</button>
     </form>
   </div>
 
+  <!-- Bootstrap JS -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+  ></script>
+
   <script>
-    let slotId = null;
+    let slotIds = [];
 
     document.addEventListener("DOMContentLoaded", () => {
-      // ดึง slotId จาก query string เช่น /booking?slotId=123
+      // 1) อ่าน slotIds จาก query string เช่น ?slotIds=10,11,12
       const params = new URLSearchParams(window.location.search);
-      slotId = params.get("slotId");
-      if (!slotId) {
-        alert("ไม่พบ slotId ใน URL");
+      const slotIdsStr = params.get("slotIds");
+      if (!slotIdsStr) {
+        alert("ไม่พบ slotIds");
         return;
       }
 
-      loadSlotInfo();
+      slotIds = slotIdsStr.split(",").map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      if (slotIds.length === 0) {
+        alert("ไม่พบ slotIds ที่ถูกต้อง");
+        return;
+      }
+
+      // 2) โหลดข้อมูล slot หลายช่อง
+      loadMultipleSlots();
+
+      // 3) ผูก event ให้ form
       document.getElementById("bookingForm").addEventListener("submit", doBooking);
     });
 
-    function loadSlotInfo() {
-      // เรียก /api/single-slot/:slotId
-      fetch("/api/single-slot/" + slotId)
-        .then(res => res.json())
-        .then(data => {
-          if (!data.slot) {
-            document.getElementById("slotInfo").innerHTML =
-              `<div class="alert alert-danger">ไม่พบข้อมูล Slot</div>`;
-            return;
+    // ─────────────────────────────────────────────────────────────
+    // A) โหลดข้อมูล Slot หลายช่อง (api แบบใหม่)
+    //    → แสดงวันที่ เวลา
+    //    → ได้ tutor_id → โหลดวิชาของติวเตอร์
+    // ─────────────────────────────────────────────────────────────
+    function loadMultipleSlots() {
+      // สมมติเราทำ API แยก หรือใช้ /api/multi-slots?ids=... 
+      // หรือจะใช้วิธี fetch("/api/single-slot/" + id) ทีละตัวก็ได้
+      // เพื่อความง่าย เดี๋ยวนี้ขอสมมติว่ามี endpoint /api/multi-slots?ids=...
+      // แต่ถ้ายังไม่มี ให้ทำเอง: fetch ทีละตัว หรือ POST body
+      // (ตัวอย่าง: จะ fetch ทีละตัว แล้วรวมกัน)
+
+      // Promise.all ตัวอย่าง
+      const fetchPromises = slotIds.map(id => fetch(`/api/single-slot/${id}`).then(res => res.json()));
+      Promise.all(fetchPromises)
+        .then(results => {
+          let slotList = [];
+          let tutorIdSet = new Set();
+
+          results.forEach(r => {
+            if (r.slot) {
+              slotList.push(r.slot);
+              if (r.slot.tutor_id) {
+                tutorIdSet.add(r.slot.tutor_id);
+              }
+            }
+          });
+
+          // แสดงข้อมูล slotList
+          showSlotsInfo(slotList);
+
+          // สมมติว่าทุก slot เป็นของติวเตอร์คนเดียว → tutorIdSet.size == 1
+          if (tutorIdSet.size === 1) {
+            const tutorId = Array.from(tutorIdSet)[0];
+            loadTutorSubjects(tutorId);
           }
-          const s = data.slot;
-          document.getElementById("slotInfo").innerHTML = `
-            <p><strong>วันที่:</strong> ${s.date}</p>
-            <p><strong>เวลา:</strong> ${s.start_time} - ${s.end_time}</p>
-            <p><strong>สถานะ:</strong> ${s.status}</p>
-          `;
         })
         .catch(err => {
-          console.error(err);
-          alert("เกิดข้อผิดพลาดในการโหลดข้อมูล Slot");
+          console.error("loadMultipleSlots error:", err);
+          alert("เกิดข้อผิดพลาดในการโหลด Slot หลายช่อง");
         });
     }
 
+    function showSlotsInfo(slotList) {
+      const container = document.getElementById("slotsInfo");
+      if (slotList.length === 0) {
+        container.innerHTML = `<div class="alert alert-danger">ไม่พบข้อมูล Slot</div>`;
+        return;
+      }
+
+      let html = `<h5>Slot ที่เลือก (${slotList.length} ช่อง):</h5><ul>`;
+      slotList.forEach(s => {
+        html += `<li>
+          Slot ID: ${s.id},
+          วันที่: ${s.date},
+          เวลา: ${s.start_time} - ${s.end_time}
+        </li>`;
+      });
+      html += `</ul>`;
+
+      container.innerHTML = html;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // B) โหลด “วิชา” ของติวเตอร์ (api/tutor/:tutorId)
+    //    → เติมลง <select id="chosenSubject">
+    // ─────────────────────────────────────────────────────────────
+    function loadTutorSubjects(tutorId) {
+      fetch(`/api/tutor/${tutorId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (!data.profile) return;
+
+          const subjSelect = document.getElementById("chosenSubject");
+          if (data.profile.subjects) {
+            const subjectsArr = data.profile.subjects.split(",");
+            // เคลียร์ option เก่า (ยกเว้น option[0])
+            for (let i = subjSelect.options.length - 1; i > 0; i--) {
+              subjSelect.remove(i);
+            }
+
+            subjectsArr.forEach(subj => {
+              subj = subj.trim();
+              if (!subj) return;
+              const opt = document.createElement("option");
+              opt.value = subj;
+              opt.textContent = subj;
+              subjSelect.appendChild(opt);
+            });
+          }
+        })
+        .catch(err => {
+          console.error("loadTutorSubjects error:", err);
+        });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // C) เมื่อกด “ยืนยันการจอง” → POST /book-slot (แบบหลาย slotIds)
+    // ─────────────────────────────────────────────────────────────
     function doBooking(e) {
       e.preventDefault();
+
       const chosenSubject = document.getElementById("chosenSubject").value;
       const bookingType = document.getElementById("bookingType").value;
+
+      if (slotIds.length === 0) {
+        alert("ไม่พบ slotIds");
+        return;
+      }
+      if (!chosenSubject) {
+        alert("กรุณาเลือกวิชา");
+        return;
+      }
 
       fetch("/book-slot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          slotId: slotId,
+          slotIds: slotIds,          // ส่ง array ของ slotId ที่เลือก
           chosenSubject: chosenSubject,
           bookingType: bookingType
         })
       })
-      .then(res => res.json())
-      .then(data => {
-        alert(data.message);
-        // ถ้าจองสำเร็จ → redirect ไปหน้าอื่น เช่น /pending-bookings
-        if (data.message.includes("pending")) {
-          window.location.href = "/pending-bookings";
-        }
-      })
-      .catch(err => {
-        console.error(err);
-        alert("ไม่สามารถจอง slot ได้");
-      });
+        .then(res => res.json())
+        .then(data => {
+          console.log("Book-slot (multi) response:", data);
+          alert(data.message || "ส่งคำขอจองแล้ว");
+          // ถ้าต้องการ redirect ไปหน้าอื่น เช่น /schedule
+          // window.location.href = "/schedule";
+        })
+        .catch(err => {
+          console.error("Error booking multiple slots:", err);
+          alert("ไม่สามารถจอง slot ได้");
+        });
     }
   </script>
 </body>

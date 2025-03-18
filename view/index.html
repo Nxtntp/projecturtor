@@ -1,4 +1,4 @@
-<!-- index.html -->
+<!-- ตัวอย่าง index.html -->
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -6,16 +6,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Welcome to Tutor Finder</title>
 
-  <!-- เรียก Bootstrap CSS จาก CDN -->
+  <!-- Bootstrap CSS -->
   <link 
     rel="stylesheet" 
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
   >
-  <!-- ถ้ามี style.css ของเดิม ก็ยังสามารถเรียกต่อท้ายได้ -->
   <link rel="stylesheet" href="style.css">
+  <link 
+    rel="stylesheet" 
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css"
+  >
 </head>
 <body>
-  <!-- นี่คือ Navbar ของ Bootstrap -->
   <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
     <div class="container-fluid">
       <a class="navbar-brand" href="/">Tutor Finder</a>
@@ -44,23 +46,65 @@
           <li class="nav-item" id="profileLink" style="display:none;">
             <a class="nav-link" href="/profile">โปรไฟล์</a>
           </li>
-          <!-- ลิงก์ตารางสอน แยกเป็น <li> เดี่ยวๆ ไม่ซ้อนใน logout -->
           <li class="nav-item" id="scheduleLink" style="display:none;">
             <a class="nav-link" href="/schedule">ตารางสอน</a>
           </li>
+
+          <!-- (ใหม่) เพิ่มลิงก์ไปหน้า myBookings -->
+          <li class="nav-item" id="myBookingsLink" style="display:none;">
+            <a class="nav-link" href="/my-bookings">การจองของฉัน</a>
+          </li>
+          <!-- จบส่วนใหม่ -->
+
+          <li class="nav-item" id="notifItem" style="display:none; position: relative;">
+            <a 
+              class="nav-link" 
+              href="#" 
+              onclick="toggleNotifications()" 
+              style="position: relative;"
+            >
+              <i class="bi bi-bell"></i>
+              <span 
+                id="notifCount" 
+                class="badge bg-danger" 
+                style="position: absolute; top:0; right:-10px; font-size:0.75rem;"
+              >
+                0
+              </span>
+            </a>
+            <div 
+              id="notificationsPanel"
+              style="
+                display: none; 
+                position: absolute; 
+                top: 50px; 
+                right: 0; 
+                width: 300px; 
+                background: #fff; 
+                border: 1px solid #ccc; 
+                border-radius: 4px;
+                z-index: 999;
+              "
+            >
+              <ul 
+                id="notifList" 
+                class="list-group m-2"
+                style="max-height: 300px; overflow-y: auto;"
+              >
+                <!-- เติมด้วย JS -->
+              </ul>
+            </div>
+          </li>
+
           <li class="nav-item" id="logoutLink" style="display:none;">
             <a class="nav-link" href="#" onclick="logout()">ออกจากระบบ</a>
-            <li class="nav-item" id="calendarLink" style="display:none;">
-              <a class="nav-link" href="/calendar">ปฏิทินตารางสอน</a>
-            </li>
-            
           </li>
         </ul>
       </div>
     </div>
   </nav>
 
-  <!-- ส่วนเนื้อหา (Hero Section) -->
+  <!-- Hero Section -->
   <div class="container my-5">
     <div class="row">
       <div class="col-md-12 text-center">
@@ -79,7 +123,7 @@
     <p class="mb-0">&copy; 2025 Tutor Finder</p>
   </footer>
 
-  <!-- เรียก Bootstrap JS (ถ้าใช้ฟังก์ชัน Navbar, Modal ฯลฯ) -->
+  <!-- Bootstrap JS -->
   <script 
     src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
   ></script>
@@ -90,7 +134,7 @@
         .then(response => response.json())
         .then(data => {
           if (data.message === "ผู้ใช้ล็อกอินอยู่") {
-            // ซ่อนลิงก์สมัคร/ล็อกอิน
+            // ซ่อนสมัคร/ล็อกอิน
             document.getElementById("signupLink").style.display = "none";
             document.getElementById("loginLink").style.display = "none";
 
@@ -99,8 +143,12 @@
             document.getElementById("profileLink").style.display = "block";
             document.getElementById("searchLink").style.display = "block";
             document.getElementById("scheduleLink").style.display = "block";
-            document.getElementById("calendarLink").style.display = "block";
 
+            // (ใหม่) โชว์ลิงก์ myBookings
+            document.getElementById("myBookingsLink").style.display = "block";
+
+            // โชว์กระดิ่งแจ้งเตือน
+            document.getElementById("notifItem").style.display = "block";
           }
         })
         .catch(error => {
@@ -120,6 +168,63 @@
       })
       .catch(error => {
         console.error("เกิดข้อผิดพลาดในการออกจากระบบ", error);
+      });
+    }
+
+    // ส่วนกระดิ่งแจ้งเตือน (เหมือนเดิม)
+    let panelVisible = false;
+    function toggleNotifications() {
+      panelVisible = !panelVisible;
+      const panel = document.getElementById("notificationsPanel");
+      panel.style.display = panelVisible ? "block" : "none";
+      if (panelVisible) {
+        loadNotifications();
+      }
+    }
+    function loadNotifications() {
+      fetch("/notifications")
+        .then(res => res.json())
+        .then(data => {
+          const notifList = document.getElementById("notifList");
+          notifList.innerHTML = "";
+          if (!data.notifications || data.notifications.length === 0) {
+            notifList.innerHTML = `<li class="list-group-item">ไม่มีการแจ้งเตือน</li>`;
+            document.getElementById("notifCount").textContent = "0";
+            return;
+          }
+          let unreadCount = data.notifications.filter(n => n.is_read === 0).length;
+          document.getElementById("notifCount").textContent = unreadCount;
+          data.notifications.forEach(noti => {
+            let li = document.createElement("li");
+            li.className = "list-group-item";
+            const createdTime = new Date(noti.created_at).toLocaleString();
+            li.textContent = `${noti.message} (${createdTime})`;
+            if (noti.is_read === 0) {
+              li.style.fontWeight = "bold";
+            }
+            li.addEventListener("click", () => {
+              markAsRead(noti.id);
+            });
+            notifList.appendChild(li);
+          });
+        })
+        .catch(err => {
+          console.error("loadNotifications error:", err);
+        });
+    }
+    function markAsRead(notiId) {
+      fetch("/notifications/mark-read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notificationId: notiId })
+      })
+      .then(res => res.json())
+      .then(data => {
+        console.log("markAsRead:", data);
+        loadNotifications();
+      })
+      .catch(err => {
+        console.error("markAsRead error:", err);
       });
     }
   </script>

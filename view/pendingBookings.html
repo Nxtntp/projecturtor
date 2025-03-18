@@ -3,7 +3,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <title>คำขอจอง (Pending Bookings)</title>
+  <title>คำขอจอง (Pending) - รวมหลายชั่วโมง</title>
   <!-- Bootstrap CSS -->
   <link 
     rel="stylesheet" 
@@ -18,7 +18,7 @@
   </nav>
 
   <div class="container my-4">
-    <h2>คำขอจองที่รออนุมัติ (Pending)</h2>
+    <h2>คำขอจองที่รออนุมัติ (Pending) - รวมหลายชั่วโมง</h2>
     <div id="pendingList"></div>
   </div>
 
@@ -29,21 +29,23 @@
 
   <script>
     document.addEventListener("DOMContentLoaded", () => {
-      loadPending();
+      loadPendingGrouped();
     });
 
-    function loadPending() {
-      fetch("/get-pending")
+    // ดึงรายการ Pending แบบ Grouped (booking_code)
+    function loadPendingGrouped() {
+      fetch("/get-pending-grouped") 
         .then(res => res.json())
         .then(data => {
-          if (!data.pending) {
+          if (!data.pendingGrouped) {
             document.getElementById("pendingList").innerHTML = `
               <div class="alert alert-warning">ไม่พบคำขอจอง</div>
             `;
             return;
           }
 
-          if (data.pending.length === 0) {
+          const list = data.pendingGrouped;
+          if (list.length === 0) {
             document.getElementById("pendingList").innerHTML = `
               <div class="alert alert-info">ยังไม่มีคำขอจองเข้ามา</div>
             `;
@@ -54,36 +56,40 @@
             <table class="table table-bordered table-striped">
               <thead class="table-light">
                 <tr>
+                  <th>ผู้จอง</th>
                   <th>วันที่</th>
-                  <th>เวลา</th>
+                  <th>ช่วงเวลา</th>
                   <th>วิชา</th>
                   <th>ประเภท</th>
-                  <th>สถานะ</th>
                   <th>จัดการ</th>
                 </tr>
               </thead>
               <tbody>
           `;
 
-          data.pending.forEach(slot => {
-            const timeRange = `${slot.start_time} - ${slot.end_time}`;
-            // ถ้า booked_subject เป็น null → แสดงเป็น "-"
-            const subj = slot.booked_subject || "-";
-            // ถ้า booking_type เป็น null → แสดงเป็น "-"
-            const btype = slot.booking_type || "-";
+          list.forEach(req => {
+            // req: {
+            //   booking_code, student_id, student_name,
+            //   dates, times, booked_subject, booking_type
+            // }
+            const subj = req.booked_subject || "-";
+            const btype = req.booking_type || "-";
+            const sname = req.student_name || "ไม่ทราบชื่อ";
 
             html += `
               <tr>
-                <td>${slot.date}</td>
-                <td>${timeRange}</td>
+                <td>${sname}</td>
+                <td>${req.dates}</td>
+                <td>${req.times}</td>
                 <td>${subj}</td>
                 <td>${btype}</td>
-                <td><span class="badge bg-warning text-dark">${slot.status}</span></td>
                 <td>
-                  <button class="btn btn-sm btn-success" onclick="confirmBooking(${slot.id}, 'approve')">
+                  <button class="btn btn-sm btn-success"
+                          onclick="confirmBookingCode('${req.booking_code}', 'approve')">
                     อนุมัติ
                   </button>
-                  <button class="btn btn-sm btn-danger" onclick="confirmBooking(${slot.id}, 'reject')">
+                  <button class="btn btn-sm btn-danger"
+                          onclick="confirmBookingCode('${req.booking_code}', 'reject')">
                     ปฏิเสธ
                   </button>
                 </td>
@@ -96,26 +102,26 @@
         })
         .catch(err => {
           console.error(err);
-          alert("ไม่สามารถโหลดคำขอจองได้");
+          alert("ไม่สามารถโหลดคำขอจองแบบกลุ่มได้");
         });
     }
 
-    function confirmBooking(slotId, action) {
-      // action = "approve" หรือ "reject"
-      fetch("/confirm-booking", {
+    // เรียก /confirm-booking-code เพื่ออนุมัติ/ปฏิเสธทั้งชุด
+    function confirmBookingCode(bookingCode, action) {
+      fetch("/confirm-booking-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slotId, action })
+        body: JSON.stringify({ bookingCode, action })
       })
       .then(res => res.json())
       .then(data => {
         alert(data.message);
-        // โหลดรายการ pending ใหม่
-        loadPending();
+        // reload
+        loadPendingGrouped();
       })
       .catch(err => {
         console.error(err);
-        alert("ไม่สามารถยืนยันการจองได้");
+        alert("เกิดข้อผิดพลาดในการอนุมัติ/ปฏิเสธแบบชุด");
       });
     }
   </script>

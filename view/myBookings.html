@@ -1,0 +1,211 @@
+<!-- /view/myBookings.html -->
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>รายการจองของฉัน</title>
+  <!-- Bootstrap CSS -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
+  >
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-danger">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">Tutor Finder</a>
+    </div>
+  </nav>
+
+  <div class="container my-4">
+    <h1>รายการจองของฉัน (Student)</h1>
+    <div id="bookingsTable"></div>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
+  ></script>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      loadMyBookings();
+    });
+
+    // เรียก API ดึงรายการจองของผู้เรียน (หรือผู้ใช้) ทั้งฝั่งนักเรียน/ติวเตอร์
+    function loadMyBookings() {
+      fetch('/api/my-bookings')
+        .then(res => res.json())
+        .then(data => {
+          if (!data.bookings || data.bookings.length === 0) {
+            document.getElementById("bookingsTable").innerHTML = `
+              <div class="alert alert-warning">
+                ไม่พบรายการจอง
+              </div>
+            `;
+            return;
+          }
+          renderBookings(data.bookings);
+        })
+        .catch(err => {
+          console.error(err);
+          alert("เกิดข้อผิดพลาดในการโหลดรายการจองของฉัน");
+        });
+    }
+
+    // แปลงวันที่เป็น "วันจันทร์ 2025-03-13"
+    function formatDateWithThaiDay(dateString) {
+      const dateObj = new Date(dateString.trim());
+      if (isNaN(dateObj)) {
+        // ถ้า parse ไม่ได้ ก็คืนค่าตามเดิม
+        return dateString;
+      }
+      const dayIndex = dateObj.getDay(); // 0=อาทิตย์,...,6=เสาร์
+      const thaiDays = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+      const dayName = 'วัน' + thaiDays[dayIndex];
+
+      // ตัดเอาเฉพาะส่วน YYYY-MM-DD (index 0-10) จาก dateString
+      const ymd = dateString.trim().slice(0, 10);
+      return `${dayName} ${ymd}`;
+    }
+
+    // สำหรับกรณีมีหลายวัน (เช่น "2025-03-12, 2025-03-15")
+    // แยกด้วย comma แล้ว map -> formatDateWithThaiDay -> join <br>
+    function formatDatesWithThaiDay(datesString) {
+      return datesString
+        .split(',')
+        .map(d => formatDateWithThaiDay(d))
+        .join('<br>');
+    }
+
+    // คืนค่า Badge HTML ตามสถานะ
+    function getStatusBadge(status) {
+      switch (status) {
+        case 'pending':
+          return '<span class="badge bg-warning text-dark">รออนุมัติ</span>';
+        case 'booked':
+          return '<span class="badge bg-success">จองแล้ว</span>';
+        case 'cancelled':
+          return '<span class="badge bg-danger">ยกเลิก</span>';
+        default:
+          return status;
+      }
+    }
+
+    // สร้างตารางแสดงรายการจอง
+    function renderBookings(bookings) {
+      /*
+        bookings[i] อาจมีโครงสร้างประมาณนี้:
+        {
+          booking_code: "REQ-xxx",
+          tutor_name: "พรทิวา ใจบุญ",
+          student_name: "ชลิต อยู่สุข",
+          dates: "2025-03-12, 2025-03-15",
+          times: "08:00-09:00, 10:00-11:00",
+          status: "pending"/"booked"/"cancelled",
+          booked_subject: "...",
+          booking_type: "...",
+          ...
+        }
+      */
+
+      let html = `
+        <table class="table table-bordered table-striped">
+          <thead class="table-light">
+            <tr>
+              <th>ผู้เรียน</th>
+              <th>ติวเตอร์</th>
+              <th>วันที่</th>
+              <th>ช่วงเวลา</th>
+              <th>สถานะ</th>
+              <th>Booking Code (debug)</th>
+              <th>จัดการ</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      bookings.forEach(b => {
+        const statusBadge = getStatusBadge(b.status);
+
+        // เปลี่ยน "2025-03-12, 2025-03-15" เป็น
+        // "วันพุธ 2025-03-12<br>วันเสาร์ 2025-03-15" เป็นต้น
+        const thaiDates = formatDatesWithThaiDay(b.dates);
+
+        // ถ้ามีหลายช่วงเวลา คั่นด้วยคอมมา -> แทนด้วย <br>
+        const timeLines = b.times.replace(/,/g, '<br>');
+
+        // กำหนดปุ่มต่าง ๆ ตามสถานะ
+        let actionButtons = '';
+        if (b.status === 'pending' || b.status === 'booked') {
+          // แสดงปุ่มยกเลิก
+          actionButtons += `
+            <button
+              class="btn btn-sm btn-danger"
+              onclick="cancelBooking('${b.booking_code}')"
+            >
+              ยกเลิก
+            </button>
+          `;
+        }
+        if (b.status === 'booked') {
+          // ถ้าต้องการเพิ่มปุ่ม "ชำระเงิน" ให้เพิ่มได้ เช่น:
+          actionButtons += `
+            <button
+              class="btn btn-sm btn-primary ms-2"
+              onclick="payBooking('${b.booking_code}')"
+            >
+              ชำระเงิน
+            </button>
+          `;
+        }
+        if (!actionButtons) {
+          // ถ้าไม่มีปุ่มอะไรเลย เช่น cancelled
+          actionButtons = '-';
+        }
+
+        html += `
+          <tr>
+            <td>${b.student_name || '-'}</td>
+            <td>${b.tutor_name || '-'}</td>
+            <td>${thaiDates}</td>
+            <td>${timeLines}</td>
+            <td>${statusBadge}</td>
+            <td>${b.booking_code || '-'}</td>
+            <td>${actionButtons}</td>
+          </tr>
+        `;
+      });
+
+      html += `</tbody></table>`;
+      document.getElementById("bookingsTable").innerHTML = html;
+    }
+
+    // ฟังก์ชันยกเลิกการจอง
+    function cancelBooking(bookingCode) {
+      if (!confirm("ยืนยันยกเลิกการจอง?")) return;
+
+      fetch("/cancel-booking-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingCode })
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.message || "ยกเลิกสำเร็จ");
+        loadMyBookings();
+      })
+      .catch(err => {
+        console.error(err);
+        alert("เกิดข้อผิดพลาดในการยกเลิก");
+      });
+    }
+
+    // ฟังก์ชันชำระเงิน (ตัวอย่าง)
+    function payBooking(bookingCode) {
+      // ตัวอย่าง: ไปหน้า /payment?bookingCode=xxx
+      window.location.href = `/payment?bookingCode=${bookingCode}`;
+    }
+  </script>
+</body>
+</html>

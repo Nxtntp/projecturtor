@@ -1,4 +1,3 @@
-<!-- /view/schedule.html -->
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -24,7 +23,16 @@
     }
     .big-grid-container table td {
       background: #333;
+      min-width: 80px;
+      padding: 6px;
+      position: relative; /* เผื่อใช้ style outline */
     }
+    .big-grid-container table th {
+      min-width: 100px;
+      padding: 6px;
+    }
+
+    /* สีสถานะต่าง ๆ */
     .big-grid-container table td.available {
       background: #28a745; /* เขียว */
       cursor: pointer;
@@ -37,19 +45,9 @@
       background: #ffc107; /* เหลือง */
       color: #000;
     }
-    /* เพิ่มสถานะ pending */
     .big-grid-container table td.pending {
       background: #fd7e14; /* ส้ม */
       color: #fff;
-    }
-
-    .big-grid-container table td {
-      min-width: 80px;
-      padding: 6px;
-    }
-    .big-grid-container table th {
-      min-width: 100px;
-      padding: 6px;
     }
   </style>
 </head>
@@ -69,8 +67,17 @@
       <button id="btnGenerate" class="btn btn-success">Generate 3 สัปดาห์</button>
       <button id="btnAccordion" class="btn btn-primary">ดูตาราง (Accordion)</button>
       <button id="btnSingleGrid" class="btn btn-info">ดูตาราง (Single Grid)</button>
-      <!-- ปุ่มไปหน้าดูคำขอจอง (Pending) -->
       <a href="/pending-bookings" class="btn btn-warning">ดูคำขอจอง (Pending)</a>
+    </div>
+
+    <!-- ปุ่มสลับโหมด Multi-Select + ปุ่มจองหลาย slot -->
+    <div class="text-end mb-3">
+      <button id="btnMultiSelect" class="btn btn-outline-primary">
+        Multi-Select: OFF
+      </button>
+      <button id="btnBookSelected" class="btn btn-outline-success">
+        Book Selected Slots
+      </button>
     </div>
 
     <!-- Accordion View -->
@@ -91,11 +98,20 @@
   <script>
     let lastOpenWeek = null; // จำสัปดาห์ที่เปิดใน Accordion
 
+    // สำหรับ multi-select
+    let multiSelectMode = false; 
+    let selectedSlotIds = [];
+
     document.addEventListener("DOMContentLoaded", () => {
       // ผูก event กับปุ่ม
       document.getElementById("btnGenerate").addEventListener("click", generateSchedule);
       document.getElementById("btnAccordion").addEventListener("click", showAccordion);
       document.getElementById("btnSingleGrid").addEventListener("click", showSingleGrid);
+
+      // ปุ่ม toggle multi-select
+      document.getElementById("btnMultiSelect").addEventListener("click", toggleMultiSelectMode);
+      // ปุ่มจองหลาย slot
+      document.getElementById("btnBookSelected").addEventListener("click", bookSelectedSlots);
 
       // เริ่มต้นด้วยการดูตารางแบบ Accordion
       showAccordion();
@@ -287,7 +303,6 @@
         `;
         accordion.innerHTML += itemHtml;
       });
-      // แสดง Accordion
       accordion.style.display = "block";
     }
 
@@ -310,10 +325,11 @@
         const dateText = `${dayName} ${slot.date}`;
         const timeRange = `${slot.start_time} - ${slot.end_time}`;
 
-        // ตรวจสอบสถานะเพื่อนำไปกำหนดปุ่ม
         let action = '';
         if (slot.status === 'booked') {
           action = `<span class="text-danger">จองแล้ว</span>`;
+        } else if (slot.status === 'pending') {
+          action = `<span class="text-warning">Pending</span>`;
         } else if (slot.status === 'available') {
           action = `
             <button
@@ -323,8 +339,6 @@
               ปิด (unavailable)
             </button>
           `;
-        } else if (slot.status === 'pending') {
-          action = `<span class="text-warning">รอการยืนยัน (pending)</span>`;
         } else {
           // unavailable
           action = `
@@ -357,13 +371,12 @@
     // Single Big Grid (รวบทุกวันในช่วง)
     // ─────────────────────────────────────────────────────────────
     function renderSingleBigGrid(schedule) {
-      // 1) หา unique date ทั้งหมด
+      // หา unique date
       let dateSet = new Set();
       schedule.forEach(s => dateSet.add(s.date));
-      // แปลงเป็น array + sort
-      let dateArr = Array.from(dateSet).sort();  // อาจยาวถึง 21 วัน
+      let dateArr = Array.from(dateSet).sort();
 
-      // 2) สร้าง range ชั่วโมง 8..24
+      // สร้าง range ชั่วโมง 8..24
       let hours = [];
       for (let h = 8; h < 24; h++) {
         hours.push(h);
@@ -383,46 +396,138 @@
       html += `</tr></thead><tbody>`;
 
       hours.forEach(h => {
-        let hourLabel = String(h).padStart(2, '0') + ":00:00";
+        let hourLabel = String(h).padStart(2, '0') + ":00";
         let nextHour = String(h+1).padStart(2, '0') + ":00";
-        let timeRangeLabel = `${String(h).padStart(2, '0')}:00 - ${nextHour}`;
+        let timeRangeLabel = `${hourLabel} - ${nextHour}`;
 
         html += `<tr>`;
         // คอลัมน์แรก: เวลา
         html += `<td><strong>${timeRangeLabel}</strong></td>`;
 
-        // columns = dateArr
         dateArr.forEach(d => {
           let slot = schedule.find(s => s.date === d && s.start_time === hourLabel);
 
           if (!slot) {
             html += `<td>-</td>`;
           } else {
-            if (slot.status === 'booked') {
-              html += `<td class="booked">จองแล้ว</td>`;
-            } else if (slot.status === 'available') {
-              html += `<td class="available"
-                         onclick="toggleSlot(${slot.id}, 'unavailable')">
-                         Available
-                       </td>`;
-            } else if (slot.status === 'pending') {
-              // กรณี pending
-              html += `<td class="pending">Pending</td>`;
-            } else {
-              // unavailable
-              html += `<td class="unavailable"
-                         onclick="toggleSlot(${slot.id}, 'available')">
-                         Unavailable
-                       </td>`;
-            }
+            // ใส่ event คลิก cellClicked แทน toggleSlot โดยตรง
+            html += renderSingleGridCell(slot);
           }
         });
-
         html += `</tr>`;
       });
 
       html += `</tbody></table>`;
       return html;
+    }
+
+    // ฟังก์ชันสร้าง <td> ของ single big grid
+    function renderSingleGridCell(slot) {
+      // เช็คสถานะ
+      let className = '';
+      let label = '';
+      if (slot.status === 'booked') {
+        className = 'booked';
+        label = 'จองแล้ว';
+      } else if (slot.status === 'pending') {
+        className = 'pending';
+        label = 'Pending';
+      } else if (slot.status === 'available') {
+        className = 'available';
+        label = 'Available';
+      } else {
+        className = 'unavailable';
+        label = 'Unavailable';
+      }
+      // onclick → cellClicked(slotId, status, this)
+      return `
+        <td class="${className}"
+            onclick="cellClicked(${slot.id}, '${slot.status}', this)">
+          ${label}
+        </td>
+      `;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // cellClicked
+    // ─────────────────────────────────────────────────────────────
+    function cellClicked(slotId, status, cellElem) {
+      // ถ้า multiSelectMode = false => toggleSlot (แบบเดิม)
+      // ถ้า multiSelectMode = true  => เลือก/ยกเลิกเลือก (หลาย slot)
+      if (!multiSelectMode) {
+        // โหมดปกติ: toggle available <-> unavailable
+        if (status === 'available') {
+          toggleSlot(slotId, 'unavailable');
+        } else if (status === 'unavailable') {
+          toggleSlot(slotId, 'available');
+        }
+        // booked/pending ไม่ทำอะไร
+      } else {
+        // โหมด multi-select
+        if (selectedSlotIds.includes(slotId)) {
+          // ยกเลิกเลือก
+          selectedSlotIds = selectedSlotIds.filter(id => id !== slotId);
+          cellElem.style.outline = 'none';
+        } else {
+          // เลือก slot นี้
+          // (เฉพาะถ้า status === 'available' ค่อยให้เลือก)
+          if (status !== 'available') {
+            alert("เลือกได้เฉพาะ slot ที่ว่าง (available) เท่านั้น");
+            return;
+          }
+          selectedSlotIds.push(slotId);
+          cellElem.style.outline = '3px solid #fff';
+        }
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Toggle multi-select
+    // ─────────────────────────────────────────────────────────────
+    function toggleMultiSelectMode() {
+      multiSelectMode = !multiSelectMode;
+      // เคลียร์ selection
+      selectedSlotIds = [];
+      // เปลี่ยน label ปุ่ม
+      const btn = document.getElementById("btnMultiSelect");
+      btn.textContent = `Multi-Select: ${multiSelectMode ? 'ON' : 'OFF'}`;
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // Book selected slots (multi-hour)
+    // ─────────────────────────────────────────────────────────────
+    function bookSelectedSlots() {
+      if (selectedSlotIds.length === 0) {
+        alert("ยังไม่ได้เลือก slot ใด ๆ");
+        return;
+      }
+      const chosenSubject = prompt("กรุณาระบุวิชาที่ต้องการเรียน:");
+      if (!chosenSubject) return;
+
+      const isSingle = confirm("จองเดี่ยว (OK) หรือ กลุ่ม (Cancel)?");
+      const bookingType = isSingle ? "single" : "group";
+
+      fetch("/book-slot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slotIds: selectedSlotIds,  // <--- ส่ง array
+          chosenSubject: chosenSubject,
+          bookingType: bookingType
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.message || "ส่งคำขอจองแล้ว");
+        // reload
+        showSingleGrid(); // หรือ showAccordion() ก็ได้
+        // เคลียร์ selection
+        selectedSlotIds = [];
+      })
+      .catch(err => {
+        console.error(err);
+        alert("ไม่สามารถจอง slot ได้");
+      });
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -446,7 +551,7 @@
       return days[dayIndex] || "";
     }
 
-    // toggleSlot
+    // toggleSlot (เหมือนเดิม)
     function toggleSlot(slotId, newStatus) {
       fetch("/toggle-slot", {
         method: "POST",

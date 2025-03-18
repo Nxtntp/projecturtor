@@ -3,12 +3,19 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <title>โปรไฟล์ติวเตอร์</title>
+  <title>โปรไฟล์ติวเตอร์ (จองหลายชั่วโมง)</title>
   <!-- Bootstrap CSS -->
   <link
     rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
   >
+  <style>
+    /* สไตล์เสริมให้ช่องที่ถูกเลือกเป็นสีม่วง (selected) */
+    .selected {
+      background: purple !important;
+      color: #fff !important;
+    }
+  </style>
 </head>
 <body>
   <!-- Navbar -->
@@ -36,6 +43,13 @@
 
     <!-- List View -->
     <div id="listContainer" style="display:none;"></div>
+
+    <!-- ปุ่มยืนยันการจองหลายชั่วโมง -->
+    <div class="text-center mt-3">
+      <button id="btnConfirmBooking" class="btn btn-primary">
+        จองเวลาที่เลือก (หลายชั่วโมง)
+      </button>
+    </div>
   </div>
 
   <!-- Bootstrap JS -->
@@ -45,6 +59,7 @@
 
   <script>
     let tutorId = null;
+    let selectedSlotIds = []; // เก็บ slotId ที่เลือกหลายๆ ช่อง
 
     document.addEventListener("DOMContentLoaded", () => {
       // 1) แยก tutorId จาก URL (/tutor-profile/:tutorId)
@@ -65,6 +80,9 @@
       // ผูก event ปุ่มสลับมุมมอง
       document.getElementById("btnGrid").addEventListener("click", loadScheduleGrid);
       document.getElementById("btnList").addEventListener("click", loadScheduleList);
+
+      // ผูก event ปุ่มยืนยันการจอง (หลายชั่วโมง) -> Redirect ไป booking
+      document.getElementById("btnConfirmBooking").addEventListener("click", goBookingPage);
     });
 
     // ─────────────────────────────────────────────────────────────
@@ -208,7 +226,7 @@
     }
 
     // ─────────────────────────────────────────────────────────────
-    // E) Render Single Grid (ตารางเดียวรวมทุกวัน)
+    // E) Render Single Grid (ตารางเดียวรวมทุกวัน) + Multi-Select
     // ─────────────────────────────────────────────────────────────
     function renderSingleGrid(schedule) {
       // เรียง slot ตาม date, start_time
@@ -242,37 +260,44 @@
       html += `</tr></thead><tbody>`;
 
       hours.forEach(h => {
-        let hourLabel = `${String(h).padStart(2,'0')}:00`;
-        let startString = hourLabel + ":00";  // ex. "08:00:00"
-        let nextHour = `${String(h+1).padStart(2,'0')}:00`;
+        let hourLabel = String(h).padStart(2,'0') + ":00";  // ex. "08:00"
+        let nextHour = String(h+1).padStart(2,'0') + ":00"; // ex. "09:00"
         let timeRange = `${hourLabel}-${nextHour}`;
 
         html += `<tr><td><strong>${timeRange}</strong></td>`;
+
         dateArr.forEach(d => {
-          let slot = schedule.find(s => s.date === d && s.start_time === startString);
+          let slot = schedule.find(s => s.date === d && s.start_time === hourLabel);
           if (!slot) {
             // ไม่มี slot
             html += `<td style="background:#333; color:#fff;">-</td>`;
           } else {
             // เช็คสถานะ
+            let isSelected = selectedSlotIds.includes(slot.id);
+
             if (slot.status === 'available') {
-              // ใส่ onclick เพื่อจอง
-              // ถ้าต้องการให้เปิดหน้า booking แทนการ prompt => redirect ไป booking?slotId=xxx
-              html += `<td style="background:green; color:white; cursor:pointer;"
-                           onclick="goBookingPage(${slot.id})">
-                         Available
-                       </td>`;
+              html += `<td
+                style="cursor:pointer; background:green; color:white;"
+                class="${isSelected ? 'selected' : ''}"
+                onclick="toggleSelectSlot(${slot.id}, '${slot.status}')">
+                Available
+              </td>`;
+
             } else if (slot.status === 'unavailable') {
               html += `<td style="background:gray; color:white;">Unavailable</td>`;
+
             } else if (slot.status === 'booked') {
               html += `<td style="background:orange; color:black;">Booked</td>`;
+
             } else if (slot.status === 'pending') {
               html += `<td style="background:#ffc107; color:#000;">Pending</td>`;
+
             } else {
               html += `<td>-</td>`;
             }
           }
         });
+
         html += `</tr>`;
       });
 
@@ -317,11 +342,34 @@
     }
 
     // ─────────────────────────────────────────────────────────────
-    // G) ฟังก์ชัน “จอง Slot” → ถ้าอยากให้เปิดหน้า booking
+    // G) Toggle Select Slot (เลือกหลายชั่วโมง)
     // ─────────────────────────────────────────────────────────────
-    function goBookingPage(slotId) {
-      // Redirect ไปหน้า booking.html พร้อม slotId
-      window.location.href = "/booking?slotId=" + slotId;
+    function toggleSelectSlot(slotId, slotStatus) {
+      if (slotStatus !== 'available') return; // กันพลาด
+
+      if (selectedSlotIds.includes(slotId)) {
+        // ถ้าเลือกอยู่แล้ว -> ถอดออก
+        selectedSlotIds = selectedSlotIds.filter(id => id !== slotId);
+      } else {
+        // ยังไม่ได้เลือก -> เพิ่ม
+        selectedSlotIds.push(slotId);
+      }
+
+      // reload grid ใหม่ เพื่ออัปเดต class "selected"
+      loadScheduleGrid();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // H) ปุ่ม "จองเวลาที่เลือก" -> Redirect ไป booking พร้อม slotIds
+    // ─────────────────────────────────────────────────────────────
+    function goBookingPage() {
+      if (selectedSlotIds.length === 0) {
+        alert("กรุณาเลือกช่องเวลาอย่างน้อย 1 ช่อง");
+        return;
+      }
+      // สร้าง query param: ?slotIds=10,11,12
+      const slotIdsParam = selectedSlotIds.join(",");
+      window.location.href = `/booking?slotIds=${slotIdsParam}`;
     }
   </script>
 </body>

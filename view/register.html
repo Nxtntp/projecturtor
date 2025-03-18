@@ -1,4 +1,3 @@
-<!-- register.html -->
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -20,9 +19,11 @@
     <div class="row justify-content-center">
       <div class="col-md-6">
         <h2 class="mb-4 text-center">สมัครสมาชิก</h2>
+
+        <!-- (1) ฟอร์มสมัครสมาชิก -->
         <form id="registerForm">
           <div class="mb-3">
-            <label for="email" class="form-label">อีเมล</label>
+            <label for="email" class="form-label">อีเมล (@ku.th)</label>
             <input 
               type="email" 
               class="form-control" 
@@ -57,15 +58,29 @@
               required
             >
           </div>
-          <div class="mb-3">
-            <label for="role" class="form-label">บทบาท</label>
-            <select class="form-select" id="role">
-              <option value="student">นักศึกษา</option>
-              <option value="tutor">ติวเตอร์</option>
-            </select>
-          </div>
+
+          <!-- ลบส่วน role ออกไปเลย -->
+
           <button type="submit" class="btn btn-danger w-100">สมัครสมาชิก</button>
         </form>
+
+        <!-- (2) ส่วนฟอร์มกรอก OTP (ซ่อนอยู่ก่อน) -->
+        <div id="otpSection" class="mt-4" style="display: none;">
+          <h4>กรอกรหัส OTP</h4>
+          <div class="mb-3">
+            <label for="otpInput" class="form-label">OTP ที่ส่งไปยังอีเมล</label>
+            <input 
+              type="text" 
+              class="form-control" 
+              id="otpInput"
+              placeholder="เช่น 123456"
+            >
+          </div>
+          <button id="btnVerifyOtp" class="btn btn-success w-100">
+            ยืนยัน OTP
+          </button>
+        </div>
+
       </div>
     </div>
   </div>
@@ -74,31 +89,86 @@
     src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
   ></script>
   <script>
+    let currentEmail = "";  // เก็บอีเมลของผู้สมัคร เพื่อใช้ตอน verify-otp
+
+    // (1) เมื่อกดปุ่มสมัครสมาชิก
     document.getElementById("registerForm").addEventListener("submit", function(event) {
       event.preventDefault();
+
       const email = document.getElementById("email").value;
       const name = document.getElementById("name").value;
       const phone = document.getElementById("phone").value;
       const password = document.getElementById("password").value;
-      const role = document.getElementById("role").value;
 
+      // ลบ role ออกจาก body
       fetch("/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, name, phone, password_hash: password, role })
+        body: JSON.stringify({ 
+          email, 
+          name, 
+          phone, 
+          password_hash: password
+        })
       })
       .then(response => response.json())
       .then(data => {
-        if (data.message === "User added successfully") {
+        console.log("register response:", data);
+
+        if (data.message && data.message.includes("กรุณายืนยัน OTP")) {
+          // สมัครสำเร็จ -> ให้ผู้ใช้ยืนยัน OTP
+          alert(data.message);
+          currentEmail = email;
+
+          // ซ่อนฟอร์มสมัคร, แสดงฟอร์ม OTP
+          document.getElementById("registerForm").style.display = "none";
+          document.getElementById("otpSection").style.display = "block";
+        }
+        else if (data.message === "User added successfully") {
+          // (กรณีข้อความเป็นแบบเดิม ถ้า server ไม่ได้แก้)
           alert("สมัครสมาชิกสำเร็จ");
           window.location.href = "/login";
-        } else {
+        }
+        else {
           alert(data.message);
         }
       })
       .catch(error => {
         console.error("เกิดข้อผิดพลาด:", error);
         alert("เกิดข้อผิดพลาดในการสมัครสมาชิก");
+      });
+    });
+
+    // (2) เมื่อกดปุ่มยืนยัน OTP
+    document.getElementById("btnVerifyOtp").addEventListener("click", function() {
+      const otp = document.getElementById("otpInput").value.trim();
+      if (!otp) {
+        alert("กรุณากรอก OTP");
+        return;
+      }
+
+      fetch("/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: currentEmail,
+          otp: otp
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        console.log("verify-otp response:", data);
+        if (data.message && data.message.includes("ยืนยันอีเมลสำเร็จ")) {
+          alert("ยืนยันอีเมลเรียบร้อย! กรุณาเข้าสู่ระบบ");
+          window.location.href = "/login";
+        }
+        else {
+          alert(data.message || "ไม่สามารถยืนยัน OTP ได้");
+        }
+      })
+      .catch(err => {
+        console.error("verify-otp error:", err);
+        alert("เกิดข้อผิดพลาดในการยืนยัน OTP");
       });
     });
   </script>

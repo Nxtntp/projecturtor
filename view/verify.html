@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>ยืนยัน OTP</title>
+  <!-- ใส่ Bootstrap หรือ CSS ตามต้องการ -->
+</head>
+<body>
+  <div class="container">
+    <h1>กรอก OTP ที่ได้รับทางอีเมล</h1>
+
+    <div class="mb-3">
+      <label>อีเมลที่ใช้สมัคร:</label>
+      <input type="email" id="email" class="form-control" required>
+    </div>
+
+    <div class="mb-3">
+      <label>รหัส OTP:</label>
+      <input type="text" id="otp" class="form-control" required>
+    </div>
+
+    <button class="btn btn-primary" onclick="verifyOtp()">ยืนยัน OTP</button>
+  </div>
+
+  <script>
+    function verifyOtp() {
+      const email = document.getElementById('email').value.trim();
+      const otp   = document.getElementById('otp').value.trim();
+
+      if (!email || !otp) {
+        alert("กรุณากรอกอีเมลและ OTP ให้ครบ");
+        return;
+      }
+
+      fetch('/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp })
+      })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.message);
+        if (data.message.includes("ยืนยันอีเมลสำเร็จ")) {
+          // ถ้า OTP ถูกต้อง -> ไปหน้า login หรือหน้าอื่น
+          window.location.href = "/login";
+        }
+      })
+      .catch(err => {
+        console.error("Error verifying OTP:", err);
+        alert("เกิดข้อผิดพลาดในการยืนยัน OTP");
+      });
+    }
+  </script>
+</body>
+</html>
