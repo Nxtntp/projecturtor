@@ -99,9 +99,9 @@
       const name = document.getElementById("name").value;
       const phone = document.getElementById("phone").value;
       const password = document.getElementById("password").value;
-
-      // ลบ role ออกจาก body
-      fetch("/users", {
+    
+       // ลบ role ออกจาก body
+       fetch("/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -113,64 +113,12 @@
       })
       .then(response => response.json())
       .then(data => {
-        console.log("register response:", data);
-
-        if (data.message && data.message.includes("กรุณายืนยัน OTP")) {
-          // สมัครสำเร็จ -> ให้ผู้ใช้ยืนยัน OTP
-          alert(data.message);
-          currentEmail = email;
-
-          // ซ่อนฟอร์มสมัคร, แสดงฟอร์ม OTP
-          document.getElementById("registerForm").style.display = "none";
-          document.getElementById("otpSection").style.display = "block";
-        }
-        else if (data.message === "User added successfully") {
-          // (กรณีข้อความเป็นแบบเดิม ถ้า server ไม่ได้แก้)
-          alert("สมัครสมาชิกสำเร็จ");
-          window.location.href = "/login";
-        }
-        else {
-          alert(data.message);
-        }
+        console.log("register response:", data)
       })
-      .catch(error => {
-        console.error("เกิดข้อผิดพลาด:", error);
-        alert("เกิดข้อผิดพลาดในการสมัครสมาชิก");
-      });
-    });
 
-    // (2) เมื่อกดปุ่มยืนยัน OTP
-    document.getElementById("btnVerifyOtp").addEventListener("click", function() {
-      const otp = document.getElementById("otpInput").value.trim();
-      if (!otp) {
-        alert("กรุณากรอก OTP");
-        return;
-      }
-
-      fetch("/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: currentEmail,
-          otp: otp
-        })
-      })
-      .then(res => res.json())
-      .then(data => {
-        console.log("verify-otp response:", data);
-        if (data.message && data.message.includes("ยืนยันอีเมลสำเร็จ")) {
-          alert("ยืนยันอีเมลเรียบร้อย! กรุณาเข้าสู่ระบบ");
-          window.location.href = "/login";
-        }
-        else {
-          alert(data.message || "ไม่สามารถยืนยัน OTP ได้");
-        }
-      })
-      .catch(err => {
-        console.error("verify-otp error:", err);
-        alert("เกิดข้อผิดพลาดในการยืนยัน OTP");
-      });
-    });
+      
+    })
+     
   </script>
 </body>
 </html>

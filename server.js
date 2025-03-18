@@ -9,20 +9,7 @@ const multer = require('multer');
 // (ใหม่) เพิ่ม 2 ไลบรารีสำหรับ PromptPay QR
 const promptpay = require('promptpay-qr');
 const QRCode = require('qrcode');
-
-const nodemailer = require('nodemailer');
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,        // เปลี่ยนเป็น 465
-  secure: true,     // ใช้ SSL
-  auth: {
-    user: 'netzanadonaja@gmail.com',
-    pass: 'vcbokbgakcvmyelv'
-  }
-});
-
-
+const transporter = require("./utils/transporter");
 
 const app = express();
 
@@ -32,7 +19,7 @@ app.use(express.json());
 // 2) static files
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 3) session
+// 3) session/u
 app.use(session({
   secret: 'my_super_secret_key_12345',
   resave: false,
@@ -59,7 +46,10 @@ db.connect(err => {
 | ฟังก์ชันเพิ่ม Notification เข้าในตาราง notifications
 ------------------------------------------------------------------ */
 function addNotification(userId, message) {
-  const sql = `INSERT INTO notifications (user_id, message) VALUES (?, ?)`;
+  const sql = `
+    INSERT INTO notifications (user_id, message)
+    VALUES (?, ?)
+  `;
   db.query(sql, [userId, message], (err) => {
     if (err) {
       console.error("Error adding notification:", err);
@@ -72,8 +62,9 @@ function addNotification(userId, message) {
 ------------------------------------------------------------------ */
 app.get('/notifications', (req, res) => {
   const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
-
+  if (!userId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
   const sql = `
     SELECT id, message, is_read, created_at
     FROM notifications
@@ -91,7 +82,9 @@ app.get('/notifications', (req, res) => {
 
 app.post('/notifications/mark-read', (req, res) => {
   const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!userId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const { notificationId } = req.body;
   if (!notificationId) {
@@ -139,12 +132,10 @@ const upload = multer({ storage: storage });
 
 /* ------------------------------------------------------------------
 | REGISTER (POST /users)
-| - สร้าง user + สร้าง otp_code + otp_expires_at + ส่งเมล
 ------------------------------------------------------------------ */
-app.post('/users', (req, res) => {
+app.post('/users', async (req, res) => {
   const { email, name, phone, password_hash } = req.body;
 
-  // ตัวอย่างเช็ค domain @ku.th (หากไม่ต้องการ ให้ลบส่วนนี้ออก)
   if (!email.endsWith('@ku.th')) {
     return res.status(400).json({ message: "อีเมลต้องลงท้ายด้วย @ku.th" });
   }
@@ -152,119 +143,29 @@ app.post('/users', (req, res) => {
     return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
   }
 
-  // INSERT user โดยกำหนด is_verified=0
-  const insertSql = `
-    INSERT INTO users (email, name, phone, password_hash, is_verified)
-    VALUES (?, ?, ?, ?, 0)
-  `;
-  db.query(insertSql, [email, name, phone, bcrypt.hashSync(password_hash, 10)], (err, result) => {
-    if (err) {
-      console.error("เพิ่มผู้ใช้ผิดพลาด:", err);
-      return res.status(500).json({ error: "Database error" });
-    }
+  console.log("test")
 
-    // สร้าง OTP 6 หลัก + กำหนดเวลาหมดอายุ (5 นาที)
-    const otpCode = '' + Math.floor(100000 + Math.random() * 900000);
-    const expires = new Date(Date.now() + 5 * 60 * 1000); // 5 นาที
+  await transporter.sendMail({
+    from:"arrliver@gmail.com",
+    to:email , 
+    html:`<h1>Test verify email </h2>`
+  })
 
-    // อัปเดต otp_code, otp_expires_at
-    const updateSql = `
-      UPDATE users
-      SET otp_code = ?, otp_expires_at = ?
-      WHERE id = ?
-    `;
-    db.query(updateSql, [otpCode, expires, result.insertId], (err2) => {
-      if (err2) {
-        console.error("Error updating OTP in users:", err2);
-        return res.status(500).json({ message: "Database error (OTP)" });
+  db.query(
+    "INSERT INTO users (email, name, phone, password_hash) VALUES (?, ?, ?, ?)",
+    [email, name, phone, bcrypt.hashSync(password_hash, 10)],
+    (err, result) => {
+      if (err) {
+        console.error("เพิ่มผู้ใช้ผิดพลาด:", err);
+        return res.status(500).json({ error: "Database error" });
       }
-
-      // ส่งอีเมลแจ้ง OTP
-      const mailOptions = {
-        from: 'YOUR_GMAIL@gmail.com', // ตรงกับ user ใน transporter
-        to: email,
-        subject: 'OTP สำหรับสมัครสมาชิก',
-        text: `สวัสดีค่ะ/ครับ\nรหัส OTP ของคุณคือ: ${otpCode}\n(หมดอายุใน 5 นาที)`
-      };
-
-      transporter.sendMail(mailOptions, (mailErr, info) => {
-        if (mailErr) {
-          console.error('Error sending email:', mailErr);
-          return res.status(500).json({ message: 'ไม่สามารถส่งอีเมล OTP' });
-        }
-
-        return res.json({
-          message: 'สมัครสมาชิกสำเร็จแล้ว กรุณายืนยัน OTP ที่ส่งไปยังอีเมล',
-          userId: result.insertId
-        });
-      });
-    });
-  });
-});
-
-/* ------------------------------------------------------------------
-| VERIFY-OTP (POST /verify-otp)
-| - ตรวจสอบ otp_code + otp_expires_at
------------------------------------------------------------------- */
-app.post('/verify-otp', (req, res) => {
-  const { email, otp } = req.body;
-  if (!email || !otp) {
-    return res.status(400).json({ message: 'ข้อมูลไม่ครบ (email, otp)' });
-  }
-
-  const sqlSelect = `
-    SELECT id, otp_code, otp_expires_at, is_verified
-    FROM users
-    WHERE email = ?
-    LIMIT 1
-  `;
-  db.query(sqlSelect, [email], (err, rows) => {
-    if (err) {
-      console.error("select user error:", err);
-      return res.status(500).json({ message: "Database error" });
+      res.json({ message: "User added successfully", userId: result.insertId });
     }
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "ไม่พบผู้ใช้ email นี้" });
-    }
-
-    const user = rows[0];
-    // ถ้า user ยืนยันไปแล้ว
-    if (user.is_verified === 1) {
-      return res.status(400).json({ message: "ผู้ใช้นี้ยืนยันอีเมลไปแล้ว" });
-    }
-
-    // เช็คว่า OTP ตรงกันไหม
-    if (user.otp_code !== otp) {
-      return res.status(400).json({ message: "OTP ไม่ถูกต้อง" });
-    }
-
-    // เช็คว่า OTP หมดอายุหรือยัง
-    const now = new Date();
-    if (now > user.otp_expires_at) {
-      return res.status(400).json({ message: "OTP หมดอายุแล้ว" });
-    }
-
-    // ผ่านหมด -> ยืนยัน is_verified=1
-    const sqlUpdate = `
-      UPDATE users
-      SET is_verified = 1,
-          otp_code = NULL,
-          otp_expires_at = NULL
-      WHERE id = ?
-    `;
-    db.query(sqlUpdate, [user.id], (err2) => {
-      if (err2) {
-        console.error("update user is_verified error:", err2);
-        return res.status(500).json({ message: "Database error" });
-      }
-      return res.json({ message: "ยืนยันอีเมลสำเร็จ (OTP ถูกต้อง)" });
-    });
-  });
+  );
 });
 
 /* ------------------------------------------------------------------
 | LOGIN (POST /login)
-| - บังคับให้ is_verified=1 ก่อนล็อกอิน
 ------------------------------------------------------------------ */
 app.post('/login', (req, res) => {
   const { email, password } = req.body;
@@ -276,13 +177,6 @@ app.post('/login', (req, res) => {
     if (rows.length > 0) {
       const user = rows[0];
       if (bcrypt.compareSync(password, user.password_hash)) {
-
-        // ถ้ายังไม่ verify
-        if (user.is_verified !== 1) {
-          return res.status(400).json({ message: 'กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ' });
-        }
-
-        // ผ่าน -> ล็อกอิน
         req.session.userId = user.id;
         req.session.email = user.email;
         return res.json({ message: 'เข้าสู่ระบบสำเร็จ', user });
@@ -300,7 +194,9 @@ app.post('/login', (req, res) => {
 ------------------------------------------------------------------ */
 app.post('/update-profile', (req, res) => {
   const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!userId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const {
     category,
@@ -403,8 +299,9 @@ app.post('/update-profile', (req, res) => {
 ------------------------------------------------------------------ */
 app.post('/upload-profile-pic', upload.single('profilePic'), (req, res) => {
   const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
-
+  if (!userId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
   if (!req.file) {
     return res.status(400).json({ message: 'ไม่พบไฟล์รูป (profilePic)' });
   }
@@ -429,7 +326,9 @@ app.post('/upload-profile-pic', upload.single('profilePic'), (req, res) => {
 ------------------------------------------------------------------ */
 app.post('/generate-schedule', (req, res) => {
   const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!userId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const delSql = `
@@ -443,44 +342,44 @@ app.post('/generate-schedule', (req, res) => {
       return res.status(500).json({ message: 'Database error' });
     }
 
-  const daysToGenerate = 21;
-  const startDate = new Date();
-  let slotData = [];
+    const daysToGenerate = 21;
+    const startDate = new Date();
+    let slotData = [];
 
-  for (let i = 0; i < daysToGenerate; i++) {
-    let current = new Date(startDate);
-    current.setDate(current.getDate() + i);
-    let dateString = current.toISOString().slice(0, 10);
+    for (let i = 0; i < daysToGenerate; i++) {
+      let current = new Date(startDate);
+      current.setDate(current.getDate() + i);
+      let dateString = current.toISOString().slice(0, 10);
 
-    for (let h = 8; h < 24; h++) {
-      const start_time = `${String(h).padStart(2,'0')}:00:00`;
-      const end_time = `${String(h+1).padStart(2,'0')}:00:00`;
-      slotData.push([
-        userId,
-        dateString,
-        start_time,
-        end_time,
-        'unavailable',
-        null
-      ]);
+      for (let h = 8; h < 24; h++) {
+        const start_time = `${String(h).padStart(2,'0')}:00:00`;
+        const end_time = `${String(h+1).padStart(2,'0')}:00:00`;
+        slotData.push([
+          userId,
+          dateString,
+          start_time,
+          end_time,
+          'unavailable',
+          null
+        ]);
+      }
     }
-  }
 
-  const insSql = `
-    INSERT INTO tutor_schedule
-      (tutor_id, date, start_time, end_time, status, student_id)
-    VALUES ?
-  `;
-  db.query(insSql, [slotData], (errIns, result) => {
-    if (errIns) {
-      console.error("insert slot ใหม่ผิดพลาด:", errIns);
-      return res.status(500).json({ message: 'Database error' });
-    }
-    res.json({
-      message: 'ลบ slot อนาคต + สร้าง Time Slots 3 สัปดาห์สำเร็จ',
-      insertedRows: result.affectedRows
+    const insSql = `
+      INSERT INTO tutor_schedule
+        (tutor_id, date, start_time, end_time, status, student_id)
+      VALUES ?
+    `;
+    db.query(insSql, [slotData], (errIns, result) => {
+      if (errIns) {
+        console.error("insert slot ใหม่ผิดพลาด:", errIns);
+        return res.status(500).json({ message: 'Database error' });
+      }
+      res.json({
+        message: 'ลบ slot อนาคต + สร้าง Time Slots 3 สัปดาห์สำเร็จ',
+        insertedRows: result.affectedRows
+      });
     });
-  });
   });
 });
 
@@ -489,7 +388,9 @@ app.post('/generate-schedule', (req, res) => {
 ------------------------------------------------------------------ */
 app.post('/update-schedule', (req, res) => {
   const tutorId = req.session.userId;
-  if (!tutorId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!tutorId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const { date, startTime, endTime, status, subject } = req.body;
   if (!date || !startTime || !endTime || !status) {
@@ -507,7 +408,8 @@ app.post('/update-schedule', (req, res) => {
           OR (start_time <= ? AND end_time >= ?)
       )
   `;
-  db.query(checkSql, [tutorId, date, startTime, endTime, startTime, endTime, startTime, endTime], (err, rows) => {
+  db.query(checkSql, [tutorId, date, startTime, endTime, startTime, endTime, startTime, endTime],
+  (err, rows) => {
     if (err) {
       console.error("ตรวจสอบเวลาผิดพลาด:", err);
       return res.status(500).json({ message: 'Database error' });
@@ -520,7 +422,8 @@ app.post('/update-schedule', (req, res) => {
       INSERT INTO tutor_schedule (tutor_id, date, start_time, end_time, status, subject)
       VALUES (?, ?, ?, ?, ?, ?)
     `;
-    db.query(insSql, [tutorId, date, startTime, endTime, status, subject || null], (err2) => {
+    db.query(insSql, [tutorId, date, startTime, endTime, status, subject || null],
+    (err2) => {
       if (err2) {
         console.error("บันทึกตารางเวลาผิดพลาด:", err2);
         return res.status(500).json({ message: 'Database error' });
@@ -535,14 +438,17 @@ app.post('/update-schedule', (req, res) => {
 ------------------------------------------------------------------ */
 app.post('/toggle-slot', (req, res) => {
   const tutorId = req.session.userId;
-  if (!tutorId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!tutorId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const { slotId, newStatus } = req.body;
   if (!slotId || !newStatus) {
     return res.status(400).json({ message: 'กรุณาระบุ slotId และ newStatus' });
   }
 
-  db.query('SELECT * FROM tutor_schedule WHERE id = ? AND tutor_id = ?', [slotId, tutorId], (err, rows) => {
+  db.query('SELECT * FROM tutor_schedule WHERE id = ? AND tutor_id = ?', [slotId, tutorId],
+  (err, rows) => {
     if (err) {
       console.error(err);
       return res.status(500).json({ message: 'Database error' });
@@ -551,7 +457,8 @@ app.post('/toggle-slot', (req, res) => {
       return res.status(404).json({ message: 'ไม่พบ slot หรือ slot ไม่ใช่ของคุณ' });
     }
 
-    db.query('UPDATE tutor_schedule SET status = ? WHERE id = ?', [newStatus, slotId], (err2) => {
+    db.query('UPDATE tutor_schedule SET status = ? WHERE id = ?', [newStatus, slotId],
+    (err2) => {
       if (err2) {
         console.error(err2);
         return res.status(500).json({ message: 'Database error' });
@@ -566,7 +473,9 @@ app.post('/toggle-slot', (req, res) => {
 ------------------------------------------------------------------ */
 app.post('/book-slot', (req, res) => {
   const studentId = req.session.userId;
-  if (!studentId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!studentId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const { slotId, slotIds, chosenSubject, bookingType } = req.body;
   const bookingCode = 'REQ-' + Date.now();
@@ -656,7 +565,9 @@ app.post('/book-slot', (req, res) => {
 ------------------------------------------------------------------ */
 app.post("/confirm-booking-code", (req, res) => {
   const tutorId = req.session.userId;
-  if (!tutorId) return res.status(401).json({ message: "กรุณาล็อกอินก่อน" });
+  if (!tutorId) {
+    return res.status(401).json({ message: "กรุณาล็อกอินก่อน" });
+  }
 
   const { bookingCode, action } = req.body;
   if (!bookingCode || !action) {
@@ -741,7 +652,9 @@ app.post("/confirm-booking-code", (req, res) => {
 ------------------------------------------------------------------ */
 app.post("/cancel-booking-code", (req, res) => {
   const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ message: "กรุณาล็อกอินก่อน" });
+  if (!userId) {
+    return res.status(401).json({ message: "กรุณาล็อกอินก่อน" });
+  }
 
   const { bookingCode } = req.body;
   if (!bookingCode) {
@@ -799,7 +712,6 @@ app.post("/cancel-booking-code", (req, res) => {
     }
 
     if (isStudent) {
-      // ตัวอย่างเงื่อนไขยกเลิกภายใน 3 วัน -> refund เต็ม
       if (diffDays <= 3) {
         processRefundFull();
       } else {
@@ -827,7 +739,6 @@ app.post("/cancel-booking-code", (req, res) => {
       });
 
     } else if (isTutor) {
-      // ติวเตอร์ยกเลิก -> refund เต็ม
       processRefundFull();
 
       const sqlCancel = `
@@ -858,7 +769,9 @@ app.post("/cancel-booking-code", (req, res) => {
 ------------------------------------------------------------------ */
 app.get('/get-schedule', (req, res) => {
   const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!userId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const sql = `
     SELECT
@@ -975,7 +888,9 @@ app.get('/tutor-profile/:tutorId', (req, res) => {
 | PROFILE ของตัวเอง (GET /get-profile)
 ------------------------------------------------------------------ */
 app.get('/get-profile', (req, res) => {
-  if (!req.session.userId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!req.session.userId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const userId = req.session.userId;
   const sql = `
@@ -1071,35 +986,41 @@ app.get('/register', (req, res) => {
 });
 
 app.get('/login', (req, res) => {
-  if (req.session.userId) {
-    // ถ้าเข้ามาที่ /login แล้วมี session อยู่ อาจรีไดเรคไปหน้าอื่น
-    return res.redirect('/');
-  }
   res.sendFile(path.join(__dirname, 'view', 'login.html'));
 });
 
 app.get('/profile', (req, res) => {
-  if (!req.session.userId) return res.redirect('/login');
+  if (!req.session.userId) {
+    return res.redirect('/login');
+  }
   res.sendFile(path.join(__dirname, 'view', 'profile.html'));
 });
 
 app.get('/profile/edit', (req, res) => {
-  if (!req.session.userId) return res.redirect('/login');
+  if (!req.session.userId) {
+    return res.redirect('/login');
+  }
   res.sendFile(path.join(__dirname, 'view', 'editProfile.html'));
 });
 
 app.get('/schedule', (req, res) => {
-  if (!req.session.userId) return res.redirect('/login');
+  if (!req.session.userId) {
+    return res.redirect('/login');
+  }
   res.sendFile(path.join(__dirname, 'view', 'schedule.html'));
 });
 
 app.get('/booking', (req, res) => {
-  if (!req.session.userId) return res.redirect('/login');
+  if (!req.session.userId) {
+    return res.redirect('/login');
+  }
   res.sendFile(path.join(__dirname, 'view', 'booking.html'));
 });
 
 app.get('/pending-bookings', (req, res) => {
-  if (!req.session.userId) return res.redirect('/login');
+  if (!req.session.userId) {
+    return res.redirect('/login');
+  }
   res.sendFile(path.join(__dirname, 'view', 'pendingBookings.html'));
 });
 
@@ -1108,8 +1029,9 @@ app.get('/pending-bookings', (req, res) => {
 ------------------------------------------------------------------ */
 app.get('/get-pending', (req, res) => {
   const tutorId = req.session.userId;
-  if (!tutorId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
-
+  if (!tutorId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
   const sql = `
     SELECT 
       ts.id,
@@ -1139,7 +1061,9 @@ app.get('/get-pending', (req, res) => {
 
 app.get('/get-pending-grouped', (req, res) => {
   const tutorId = req.session.userId;
-  if (!tutorId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!tutorId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const sql = `
     SELECT
@@ -1181,13 +1105,17 @@ app.get('/get-pending-grouped', (req, res) => {
 });
 
 app.get('/my-bookings', (req, res) => {
-  if (!req.session.userId) return res.redirect('/login');
+  if (!req.session.userId) {
+    return res.redirect('/login');
+  }
   res.sendFile(path.join(__dirname, 'view', 'myBookings.html'));
 });
 
 app.get('/api/my-bookings', (req, res) => {
   const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!userId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const sql = `
     SELECT
@@ -1227,6 +1155,7 @@ app.get('/api/my-bookings', (req, res) => {
     ORDER BY
       MIN(ts.date), MIN(ts.start_time)
   `;
+
   db.query(sql, [userId, userId], (err, rows) => {
     if (err) {
       console.error("Error fetching my bookings (both sides):", err);
@@ -1294,10 +1223,10 @@ function calculatePaymentAmount(bookingCode, callback) {
 | GET /api/payment-info?bookingCode=xxx
 ------------------------------------------------------------------ */
 app.get('/api/payment-info', (req, res) => {
-  console.log("==> [payment-info] bookingCode from client:", req.query.bookingCode);
-
   const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!userId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const { bookingCode } = req.query;
   if (!bookingCode) {
@@ -1311,8 +1240,6 @@ app.get('/api/payment-info', (req, res) => {
     LIMIT 1
   `;
   db.query(sqlCheck, [bookingCode], (err, rows) => {
-    console.log("==> [payment-info] sqlCheck rows:", rows);
-
     if (err) {
       console.error('payment-info check error:', err);
       return res.status(500).json({ message: 'Database error' });
@@ -1349,10 +1276,10 @@ app.get('/api/payment-info', (req, res) => {
 | POST /api/confirm-payment
 ------------------------------------------------------------------ */
 app.post('/api/confirm-payment', (req, res) => {
-  console.log("==> [confirm-payment] bookingCode from client:", req.body.bookingCode);
-
   const userId = req.session.userId;
-  if (!userId) return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  if (!userId) {
+    return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
+  }
 
   const { bookingCode } = req.body;
   if (!bookingCode) {
@@ -1366,8 +1293,6 @@ app.post('/api/confirm-payment', (req, res) => {
     LIMIT 1
   `;
   db.query(sqlCheck, [bookingCode], (err, rows) => {
-    console.log("==> [confirm-payment] sqlCheck rows:", rows);
-
     if (err) {
       console.error('confirm-payment check error:', err);
       return res.status(500).json({ message: 'Database error' });
@@ -1411,27 +1336,32 @@ app.post('/api/confirm-payment', (req, res) => {
 | PAGE ROUTE: /payment
 ------------------------------------------------------------------ */
 app.get('/payment', (req, res) => {
-  if (!req.session.userId) return res.redirect('/login');
+  if (!req.session.userId) {
+    return res.redirect('/login');
+  }
   res.sendFile(path.join(__dirname, 'view', 'payment.html'));
 });
 
 /* 
 | (ใหม่) เพิ่มการสร้าง PromptPay QR Code (GET /api/payment-qr?bookingCode=...)
+| - ต้องติดตั้ง promptpay-qr และ qrcode แล้ว
+| - ส่งกลับเป็น dataUrl (Base64) ของรูป QR
 */
 app.get('/api/payment-qr', async (req, res) => {
   try {
-    console.log("==> [payment-qr] bookingCode from client:", req.query.bookingCode);
-
+    // ตรวจสอบว่าล็อกอินหรือไม่
     const userId = req.session.userId;
     if (!userId) {
       return res.status(401).json({ message: 'กรุณาล็อกอินก่อน' });
     }
 
+    // รับ bookingCode
     const { bookingCode } = req.query;
     if (!bookingCode) {
       return res.status(400).json({ message: 'กรุณาระบุ bookingCode' });
     }
 
+    // เช็ค bookingCode
     const sqlCheck = `
       SELECT tutor_id, student_id, status, payment_status
       FROM tutor_schedule
@@ -1439,8 +1369,6 @@ app.get('/api/payment-qr', async (req, res) => {
       LIMIT 1
     `;
     db.query(sqlCheck, [bookingCode], (errCheck, rowsCheck) => {
-      console.log("==> [payment-qr] sqlCheck rowsCheck:", rowsCheck);
-
       if (errCheck) {
         console.error('payment-qr check error:', errCheck);
         return res.status(500).json({ message: 'Database error' });
@@ -1449,13 +1377,16 @@ app.get('/api/payment-qr', async (req, res) => {
         return res.status(404).json({ message: 'ไม่พบ bookingCode นี้' });
       }
       const row = rowsCheck[0];
+      // ต้องเป็น student_id ของคนเรียก
       if (row.student_id !== userId) {
         return res.status(403).json({ message: 'คุณไม่ใช่ผู้เรียนใน booking นี้' });
       }
+      // ต้องเป็น status='booked' (หรือจะอนุญาต pending ก็แล้วแต่)
       if (row.status !== 'booked') {
         return res.status(400).json({ message: `ยังไม่พร้อมชำระ (status=${row.status})` });
       }
 
+      // คำนวณยอด
       calculatePaymentAmount(bookingCode, async (errCalc, result) => {
         if (errCalc) {
           console.error('calcPayment error:', errCalc);
@@ -1467,7 +1398,8 @@ app.get('/api/payment-qr', async (req, res) => {
         }
 
         // สร้าง PromptPay Payload
-        const mobileNumber = '0971028248'; 
+        // สมมติใช้เบอร์มือถือ "0812345678"
+        const mobileNumber = '0812345678'; 
         const payload = promptpay.generatePayload(mobileNumber, { amount });
 
         // สร้าง QR Code base64
